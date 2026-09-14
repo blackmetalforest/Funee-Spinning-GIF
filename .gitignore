@@ -1,0 +1,6 @@
+# Test artifacts (fixtures under tests/fixtures/ ARE tracked)
+tests/out/
+
+# Editor / OS noise
+.DS_Store
+*.swp

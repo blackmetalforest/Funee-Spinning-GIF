@@ -1,0 +1,11 @@
+{
+  "name": "funee-spinning-gif-maker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Funee Spinning GIF Maker - turn a 3D model into a looping spin animation. Static site, no build step.",
+  "scripts": {
+    "serve": "python3 -m http.server 8000",
+    "test": "node tests/run.mjs"
+  }
+}

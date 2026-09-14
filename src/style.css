@@ -1,0 +1,260 @@
+/*
+ * Layout: a single grid that flips orientation for touch/small screens.
+ *
+ * Desktop - controls in a fixed left column, render view filling the rest.
+ * Mobile  - render view on top (sticky, so it stays visible while the settings
+ *           scroll underneath), settings below.
+ */
+
+:root {
+  --bg: #15161a;
+  --panel: #1c1e24;
+  --panel-2: #22252c;
+  --line: #2f333c;
+  --text: #e7e9ee;
+  --muted: #9aa1ad;
+  --accent: #4f8cff;
+  --danger: #e03131;
+  --radius: 8px;
+  --panel-width: 400px;
+  --gutter: 0px;            /* scroll-safe strip; only used on touch layouts */
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overscroll-behavior: none;
+}
+
+#app {
+  display: grid;
+  grid-template-columns: var(--panel-width) 1fr;
+  grid-template-areas: "panel view";
+  height: 100%;
+}
+
+/* ---------------------------------------------------------------- view */
+
+#view {
+  grid-area: view;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px;
+  gap: 8px;
+}
+
+#stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  background:
+    linear-gradient(45deg, #1a1c21 25%, transparent 25%, transparent 75%, #1a1c21 75%),
+    linear-gradient(45deg, #1a1c21 25%, #202329 25%, #202329 75%, #1a1c21 75%);
+  background-size: 24px 24px;
+  background-position: 0 0, 12px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/* The canvas is sized by the renderer; CSS only scales it to fit the stage. */
+#canvas {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  display: block;
+  /* Drag must orbit the model, not scroll the page behind it. */
+  touch-action: none;
+  cursor: grab;
+}
+#canvas.dragging { cursor: grabbing; }
+#canvas.empty { display: none; }
+
+#dropzone {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 24px;
+}
+#dropzone[hidden] { display: none; }
+#app.dragover #dropzone {
+  background: rgba(79, 140, 255, 0.12);
+  outline: 2px dashed var(--accent);
+  outline-offset: -12px;
+}
+.drop-inner { display: grid; gap: 10px; justify-items: center; }
+.drop-inner strong { font-size: 16px; }
+
+/* An id rule beats the UA [hidden] rule, so restate it explicitly. */
+#busy[hidden] { display: none; }
+#busy {
+  position: absolute;
+  inset: auto 12px 12px auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.65);
+  padding: 8px 12px;
+  border-radius: var(--radius);
+}
+.spinner {
+  width: 14px; height: 14px;
+  border: 2px solid rgba(255,255,255,0.25);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+#view-foot { display: flex; justify-content: space-between; gap: 12px; }
+
+/* --------------------------------------------------------------- panel */
+
+#panel {
+  grid-area: panel;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  -webkit-overflow-scrolling: touch;
+}
+
+#app-title {
+  margin: 2px 4px 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.group {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  /* On touch layouts this reserves the scroll-safe strip on the right. */
+  padding-right: calc(12px + var(--gutter));
+}
+.group h2 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 108px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.row:last-child { margin-bottom: 0; }
+.row label { color: var(--muted); font-size: 13px; }
+.row.actions { grid-template-columns: 1fr auto; }
+.row.file-row { grid-template-columns: 1fr auto; }
+.row output { font-variant-numeric: tabular-nums; min-width: 64px; text-align: right; }
+
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+  /* Vertical swipes scroll the page even when they start on a slider;
+     horizontal drags still change the value. */
+  touch-action: pan-y;
+}
+input[type="number"], input[type="text"], select {
+  width: 100%;
+  background: #15171c;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+}
+input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); justify-self: start; }
+input[type="color"] { width: 56px; height: 30px; padding: 2px; background: #15171c; border: 1px solid var(--line); border-radius: 6px; }
+input[readonly] { color: var(--muted); }
+
+button {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font: inherit;
+  cursor: pointer;
+  min-height: 36px;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+button.primary:hover:not(:disabled) { filter: brightness(1.08); }
+
+.save-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.save-grid .save:last-child { grid-column: 1 / -1; }
+
+#progress-wrap {
+  height: 6px;
+  background: #15171c;
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 8px 0;
+}
+#progress { height: 100%; width: 0; background: var(--accent); transition: width 0.1s linear; }
+
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.warn { color: var(--danger); font-weight: 600; }
+footer { padding: 0 4px 8px; }
+
+/* --------------------------------------------------- mobile / touch layout
+ * Width alone misses landscape tablets, so pointer:coarse is included too.
+ * Being pure CSS, this switches instantly on rotation with no JS involved.
+ */
+@media (max-width: 860px), (pointer: coarse) {
+  :root { --gutter: 56px; }
+
+  #app {
+    grid-template-columns: 1fr;
+    grid-template-rows: 45vh 1fr;
+    grid-template-areas:
+      "view"
+      "panel";
+    height: auto;
+    min-height: 100%;
+  }
+
+  /* Keep the model on screen while the settings scroll past it, otherwise
+     adjusting a slider low in the list gives no visible feedback. */
+  #view {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    height: 45vh;
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+  }
+
+  #panel {
+    overflow: visible;       /* the page scrolls, not the panel */
+    border-right: none;
+  }
+
+  .row { grid-template-columns: 96px 1fr auto; }
+  .row output { min-width: 56px; }
+}
