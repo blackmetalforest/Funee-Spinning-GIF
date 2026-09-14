@@ -46,7 +46,6 @@ function readSettings() {
     background: $('background').value,
     transparent: $('transparent').checked,
     shadeTexture: $('textures').checked,
-    cullBackfaces: $('cull').checked,
     ambient: +$('ambient').value,
     keyLight: +$('key').value,
     fillLight: +$('fill').value,
@@ -58,7 +57,7 @@ function readSettings() {
 
 function readSpin() {
   return {
-    frames: clampInt($('frames').value, 2, 240, 48),
+    frames: clampInt($('frames').value, 1, 240, 48),
     rps: +$('speed').value,
     clockwise: $('direction').value === 'cw',
   };
@@ -188,7 +187,7 @@ function discardStore() {
 
 for (const id of RANGE_IDS) $(id).addEventListener('input', applyAndPreview);
 for (const id of ['up-axis', 'direction', 'quality', 'background', 'transparent',
-  'textures', 'cull', 'width', 'height']) {
+  'textures', 'width', 'height']) {
   $(id).addEventListener('input', () => { discardStore(); applyAndPreview(); });
 }
 
@@ -204,6 +203,16 @@ $('preset').addEventListener('change', () => {
   if (!size) return;
   $('width').value = size;
   $('height').value = size;
+  discardStore();
+  applyAndPreview();
+});
+
+$('reset-view').addEventListener('click', () => {
+  $('elevation').value = DEFAULT_SETTINGS.elevation;
+  $('start').value = DEFAULT_SETTINGS.startAngle;
+  $('up-axis').value = DEFAULT_SETTINGS.upAxis;
+  $('fov').value = DEFAULT_SETTINGS.fov;
+  $('zoom').value = DEFAULT_SETTINGS.zoom;
   discardStore();
   applyAndPreview();
 });
@@ -246,7 +255,9 @@ canvas.addEventListener('pointermove', (e) => {
   const dy = (e.clientY - dragging.y) * 0.5;
   dragging = { x: e.clientX, y: e.clientY };
   $('start').value = (((+$('start').value + dx) % 360) + 360) % 360;
-  $('elevation').value = Math.max(-89, Math.min(89, +$('elevation').value - dy));
+  // Vertical drag is inverted relative to the horizontal one: dragging down
+  // raises the camera so the model tips its top toward you.
+  $('elevation').value = Math.max(-89, Math.min(89, +$('elevation').value + dy));
   applyAndPreview();
 });
 for (const type of ['pointerup', 'pointercancel']) {

@@ -29,11 +29,10 @@ export const DEFAULT_SETTINGS = {
   background: '#181a20',
   transparent: true,
   shadeTexture: true,
-  cullBackfaces: false,
   ambient: 0.30,
   keyLight: 0.95,
   fillLight: 0.32,
-  rimLight: 0.35,
+  rimLight: 0.0,
   shininess: 40,
   specular: 0.0,
   smoothAngle: 40,
@@ -192,7 +191,7 @@ export class SpinScene {
         if (!child.isMesh || !child.material) return;
         child.material.shininess = s.shininess;
         child.material.specular.setScalar(s.specular);
-        child.material.side = s.cullBackfaces ? THREE.FrontSide : THREE.DoubleSide;
+        child.material.side = THREE.DoubleSide;
         if (!s.shadeTexture && child.material.map) {
           child.material.userData.savedMap = child.material.map;
           child.material.map = null;
@@ -231,7 +230,7 @@ export class SpinScene {
     const aspect = s.width / s.height;
     const radius = 1.0;
     const margin = 1.06 / Math.max(0.2, s.zoom);
-    const fov = THREE.MathUtils.degToRad(Math.min(120, Math.max(5, s.fov)));
+    const fov = THREE.MathUtils.degToRad(Math.min(160, Math.max(5, s.fov)));
     // Fit the tighter of the two axes: a portrait frame needs more distance.
     const half = Math.atan(Math.min(Math.tan(fov / 2), Math.tan(fov / 2) * aspect));
     const dist = (radius * margin) / Math.sin(half);
