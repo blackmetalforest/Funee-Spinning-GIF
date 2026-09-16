@@ -227,6 +227,12 @@ $('reset-render').addEventListener('click', () => {
   applyAndPreview();
 });
 
+// Preview-only guide: deliberately not part of readSettings(), so toggling it
+// neither re-renders nor throws away an existing frame store.
+$('show-border').addEventListener('change', () => {
+  canvas.classList.toggle('show-border', $('show-border').checked);
+});
+
 $('browse').addEventListener('click', () => $('file-input').click());
 $('browse-empty').addEventListener('click', () => $('file-input').click());
 $('file-input').accept = FILE_ACCEPT;

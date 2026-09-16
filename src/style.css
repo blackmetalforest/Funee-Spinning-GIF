@@ -79,6 +79,23 @@ html, body {
 #canvas.dragging { cursor: grabbing; }
 #canvas.empty { display: none; }
 
+/*
+ * Marks the exact edge of the exported image.
+ *
+ * With a transparent background the render shows the stage checkerboard, and
+ * so does the stage *outside* the canvas — so there is otherwise no visual cue
+ * where the image ends and anything overhanging gets cropped.
+ *
+ * Two rings rather than one: a black line alone is near-invisible against the
+ * dark checkerboard (about 1.2:1 contrast), and a white line alone would
+ * disappear against a light render. Black inside, translucent white outside,
+ * reads on any background. Both are drawn with box-shadow so they sit outside
+ * the element and cannot shift the layout or overlap the image.
+ */
+#canvas.show-border {
+  box-shadow: 0 0 0 1px #000, 0 0 0 2px rgba(255, 255, 255, 0.5);
+}
+
 #dropzone {
   position: absolute;
   inset: 0;
