@@ -222,8 +222,8 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 button.primary:hover:not(:disabled) { filter: brightness(1.08); }
 
+/* Four exports, so an even 2x2 — no odd one out needing to span. */
 .save-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
-.save-grid .save:last-child { grid-column: 1 / -1; }
 
 #progress-wrap {
   height: 6px;

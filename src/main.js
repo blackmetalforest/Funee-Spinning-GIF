@@ -14,7 +14,7 @@ import { loopSummary, FPS_LIMIT } from './encoders/timing.js';
 import { encodeGif } from './encoders/gif.js';
 import { muxAnimation, encodeStill } from './encoders/webp.js';
 import { muxApng } from './encoders/apng.js';
-import { encodeZip, encodeSpriteSheet } from './encoders/frames.js';
+import { encodeZip } from './encoders/frames.js';
 
 const $ = (id) => document.getElementById(id);
 const app = $('app');
@@ -31,7 +31,7 @@ let rendering = false;
 const RANGE_IDS = ['elevation', 'start', 'fov', 'zoom', 'speed', 'frames',
   'ambient', 'key', 'fill', 'rim', 'specular', 'shininess'];
 
-const FORMAT_LABELS = { gif: 'GIF', webp: 'WebP', apng: 'APNG', zip: 'ZIP', sheet: 'Sprite sheet' };
+const FORMAT_LABELS = { gif: 'GIF', webp: 'WebP', apng: 'APNG', zip: 'ZIP' };
 
 function readSettings() {
   return {
@@ -341,6 +341,7 @@ async function saveAs(format) {
         rps: spin.rps,
         transparent: settings.transparent,
         background: rgb,
+        dither: $('dither').checked,
       });
       blob = gifBlob;
       note = `${info.totalMs} ms per turn`;
@@ -376,11 +377,6 @@ async function saveAs(format) {
     } else if (format === 'zip') {
       blob = await encodeZip(store, { name: `${modelName}_frames` });
       note = `${store.blobs.length} PNG frames`;
-    } else if (format === 'sheet') {
-      const sheet = await encodeSpriteSheet(store);
-      blob = sheet.blob;
-      extension = 'png';
-      note = `${sheet.columns}×${sheet.rows} grid of ${sheet.frameWidth}×${sheet.frameHeight}`;
     }
 
     download(blob, `${modelName}_spin.${extension}`);

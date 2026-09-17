@@ -1,7 +1,7 @@
 # Funee Spinning GIF Maker
 
 Drop in a 3D model, get a perfectly looping spin animation. Export it as a GIF,
-animated WebP, APNG, a ZIP of frames, or a sprite sheet.
+animated WebP, APNG, or a ZIP of frames.
 
 Everything runs in your browser. Models are never uploaded, there's no account,
 no build step and no backend — it's a static site.
@@ -47,10 +47,13 @@ and KTX2/Basis textures.
 | **WebP** | Full | Smooth alpha | 1 ms | Smallest files |
 | **APNG** | Full, lossless | Smooth alpha | 1 ms | Best quality |
 | **ZIP** | Lossless PNGs | Smooth alpha | — | For After Effects, Blender, editors |
-| **Sprite sheet** | Lossless PNG | Smooth alpha | — | For CSS and game engines |
 
 GIF uses a **single palette derived from all frames**. Quantising each frame
 separately makes flat surfaces shimmer as the palette is re-derived per frame.
+An optional **Dither GIF** checkbox adds Floyd–Steinberg error diffusion, which
+smooths gradients across the 256-colour limit at the cost of a noisier, larger
+file. gifenc has no dithering of its own, so it is implemented in
+`src/encoders/gif.js`.
 
 ## How it works
 
@@ -140,7 +143,7 @@ src/encoders/
   gif.js              gifenc with one global palette
   webp.js             animated WebP muxer
   apng.js             APNG muxer
-  frames.js           ZIP + sprite sheet
+  frames.js           ZIP of frames
 vendor/               three.js r186, Draco, gifenc, fflate (all pinned)
 sample.glb            small test model so the page has something to show
 ```
