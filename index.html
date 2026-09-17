@@ -107,9 +107,12 @@
       <div class="row"><label for="speed">Spin speed</label>
         <input type="range" id="speed" min="0.01" max="10" step="0.01" value="0.25">
         <output for="speed" id="speed-out">0.25 r/s</output></div>
-      <div class="row"><label for="frames">Frames</label>
-        <input type="range" id="frames" min="1" max="240" step="1" value="48">
-        <output for="frames" id="frames-out">48</output></div>
+      <div class="row"><label for="fps">Frame rate</label>
+        <input type="range" id="fps" min="1" max="100" step="1" value="12">
+        <output for="fps" id="fps-out">12 fps</output></div>
+      <div class="row"><label>Frames</label>
+        <span class="muted small" id="frames-note">frame rate ÷ spin speed</span>
+        <output id="frames-out">48</output></div>
       <div class="row"><label for="direction">Direction</label>
         <select id="direction">
           <option value="cw" selected>Clockwise</option>

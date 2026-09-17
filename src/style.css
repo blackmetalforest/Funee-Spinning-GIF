@@ -15,6 +15,7 @@
   --muted: #9aa1ad;
   --accent: #4f8cff;
   --danger: #e03131;
+  --caution: #e8912d;
   --radius: 8px;
   --panel-width: 400px;
   --gutter: 0px;            /* scroll-safe strip; only used on touch layouts */
@@ -190,6 +191,7 @@ html, body {
 .row:last-child { margin-bottom: 0; }
 .row label { color: var(--muted); font-size: 13px; }
 .row.actions { grid-template-columns: 1fr auto; }
+#frames-note { font-style: italic; }
 .row.file-row { grid-template-columns: 1fr auto; }
 .row output { font-variant-numeric: tabular-nums; min-width: 64px; text-align: right; }
 
@@ -243,6 +245,8 @@ button.primary:hover:not(:disabled) { filter: brightness(1.08); }
 .muted { color: var(--muted); }
 .small { font-size: 12px; }
 .warn { color: var(--danger); font-weight: 600; }
+/* One step short of .warn: still going to work, but it will cost you. */
+.caution { color: var(--caution); font-weight: 600; }
 footer { padding: 0 4px 8px; }
 
 /* --------------------------------------------------- mobile / touch layout

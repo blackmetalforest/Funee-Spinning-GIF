@@ -29,7 +29,7 @@ let rendering = false;
 
 /* ------------------------------------------------------------ settings */
 
-const RANGE_IDS = ['elevation', 'start', 'fov', 'zoom', 'speed', 'frames',
+const RANGE_IDS = ['elevation', 'start', 'fov', 'zoom', 'speed', 'fps',
   'ambient', 'key', 'fill', 'rim', 'specular', 'shininess',
   'pos-x', 'pos-y', 'pos-z', 'pitch', 'yaw', 'roll'];
 
@@ -77,10 +77,22 @@ function readSettings() {
  * and re-encoded on save, so the thresholds below are about render time, memory
  * and a file anyone would tolerate, not about a format rule.
  */
-function readSpin() {
+const FRAMES_HEAVY = 300;      // slow to render, and a GIF well past 10 MB
+const FRAMES_MAX = 1000;       // hard ceiling: beyond this a phone runs out of memory
+
+function framesFor(fps, rps) {
+  const ideal = fps / Math.max(1e-6, rps);
   return {
-    frames: clampInt($('frames').value, 1, 240, 48),
-    rps: +$('speed').value,
+    frames: Math.max(1, Math.min(FRAMES_MAX, Math.round(ideal))),
+    ideal: Math.round(ideal),
+  };
+}
+
+function readSpin() {
+  const rps = +$('speed').value;
+  return {
+    frames: framesFor(+$('fps').value, rps).frames,
+    rps,
     clockwise: $('direction').value === 'cw',
   };
 }
@@ -98,7 +110,8 @@ function syncOutputs() {
   $('fov-out').textContent = `${$('fov').value}°`;
   $('zoom-out').textContent = `${(+$('zoom').value).toFixed(2)}×`;
   $('speed-out').textContent = `${(+$('speed').value).toFixed(2)} r/s`;
-  $('frames-out').textContent = $('frames').value;
+  $('fps-out').textContent = `${$('fps').value} fps`;
+  syncFrameCount();
   for (const id of ['ambient', 'key', 'fill', 'rim', 'specular']) {
     $(`${id}-out`).textContent = (+$(id).value).toFixed(2);
   }
@@ -111,6 +124,25 @@ function syncOutputs() {
   }
 }
 
+/*
+ * Show what the chosen speed and frame rate cost in frames, and how alarmed to
+ * be about it. Orange is "this will be slow and large"; red means the count was
+ * clamped, so the export will not actually run at the requested frame rate —
+ * which the loop summary underneath then shows as a lower figure.
+ */
+function syncFrameCount() {
+  const { frames, ideal } = framesFor(+$('fps').value, +$('speed').value);
+  const out = $('frames-out');
+  out.textContent = frames;
+  // Red at the ceiling, whether or not anything was actually trimmed: sitting
+  // exactly on the cap is still the point where the app stops obliging.
+  out.classList.toggle('warn', frames >= FRAMES_MAX);
+  out.classList.toggle('caution', frames < FRAMES_MAX && frames >= FRAMES_HEAVY);
+  $('frames-note').textContent = ideal > FRAMES_MAX
+    ? `capped from ${ideal.toLocaleString()}`
+    : 'frame rate ÷ spin speed';
+}
+
 function updateLoopInfo() {
   const spin = readSpin();
   // GIF has the coarsest timing grid, so it's the honest one to quote.
@@ -120,8 +152,9 @@ function updateLoopInfo() {
   const fpsHtml = info.fps > FPS_LIMIT
     ? `<span class="warn">${fps} fps</span>`
     : `${fps} fps`;
+  const plural = spin.frames === 1 ? 'frame' : 'frames';
   $('loop-info').innerHTML =
-    `${spin.frames} frames · one full turn every ${seconds} s · ${fpsHtml} · ` +
+    `${spin.frames} ${plural} · ${seconds} s/turn · ${fpsHtml} · ` +
     `${info.actualRps.toFixed(3)} rounds/s`;
 }
 

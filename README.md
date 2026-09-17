@@ -14,6 +14,8 @@ no build step and no backend — it's a static site.
 - Renders on the GPU with three.js
 - Produces a **seamless loop** — frame *i* sits at exactly `i × 360/N` degrees,
   so the last frame steps into the first with no repeated pose
+- Takes a spin speed and a frame rate and works out the frame count for you,
+  flagging it when that count gets expensive
 - Keeps **exact timing** — 48 frames at 0.25 rounds/s totals 4.000 s, not 3.97
 - Exports with real transparency
 
