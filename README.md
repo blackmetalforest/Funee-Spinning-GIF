@@ -66,7 +66,10 @@ border** checkbox shows where the crop falls, and **Zoom** compensates. An
 off-axis model also sweeps a wider circle when spinning than it appears to at
 frame 0.
 
-**Show centre axis** draws a red arrow along the rotation axis so you can see
+**Up axis** heads the section: it corrects a model authored Z-up or X-up before
+any of the adjustments below it apply.
+
+**Show center axis** draws a red arrow along the rotation axis so you can see
 whether the model sits on it. Its length is fixed **once, when the model loads**
 — tip clear of the top, base just below the bottom — and clamped to stay inside
 the frame, because a clipped cone reads as a blunt bar rather than an arrow.

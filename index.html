@@ -59,12 +59,6 @@
       <div class="row"><label for="start">Start rotation</label>
         <input type="range" id="start" min="0" max="359" step="1" value="0">
         <output for="start" id="start-out">0°</output></div>
-      <div class="row"><label for="up-axis">Up axis</label>
-        <select id="up-axis">
-          <option value="Y" selected>Y (glTF, most apps)</option>
-          <option value="Z">Z (CAD, Blender export)</option>
-          <option value="X">X</option>
-        </select></div>
       <div class="row"><label for="fov">Field of view</label>
         <input type="range" id="fov" min="10" max="160" step="1" value="35">
         <output for="fov" id="fov-out">35°</output></div>
@@ -76,6 +70,12 @@
 
     <section class="group">
       <h2>Position</h2>
+      <div class="row"><label for="up-axis">Up axis</label>
+        <select id="up-axis">
+          <option value="Y" selected>Y (glTF, most apps)</option>
+          <option value="Z">Z (CAD, Blender export)</option>
+          <option value="X">X</option>
+        </select></div>
       <p class="muted small">Moves the model around the rotation point. Most
         models need no adjustment.</p>
       <div class="row"><label for="pos-x">Move X</label>
@@ -96,7 +96,7 @@
       <div class="row"><label for="roll">Roll</label>
         <input type="range" id="roll" min="-180" max="180" step="1" value="0">
         <output for="roll" id="roll-out">0°</output></div>
-      <div class="row"><label for="show-axis">Show centre axis</label>
+      <div class="row"><label for="show-axis">Show center axis</label>
         <input type="checkbox" id="show-axis"
                title="Marks the rotation axis with a red arrow so you can see whether the model sits on it. Preview only — it is always off while frames are rendered."></div>
       <div class="row actions"><button id="reset-position">Reset to defaults</button></div>
