@@ -1,4 +1,4 @@
-# Funee Spinning GIF Maker
+<img src="Funee%20Spinning%20GIF%20Maker%20Big.webp" alt="Funee Spinning GIF Maker" width="826">
 
 Drop in a 3D model, get a perfectly looping spin animation. Export it as a GIF,
 animated WebP, APNG, or a ZIP of frames.

@@ -17,7 +17,10 @@
   --danger: #e03131;
   --caution: #e8912d;
   --radius: 8px;
-  --panel-width: 400px;
+  /* Wide enough for the 460px title image to sit at its natural size: 460
+     plus the panel's 12px padding either side, the title's 4px margins, and
+     room for a scrollbar. */
+  --panel-width: 508px;
   --gutter: 0px;            /* scroll-safe strip; only used on touch layouts */
 }
 
@@ -163,6 +166,15 @@ html, body {
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.01em;
+}
+/* The wordmark. Scales down on narrow screens rather than forcing a
+   horizontal scroll, which is why the panel width is the only thing sized to
+   it. */
+#app-title img {
+  display: block;
+  width: 460px;
+  max-width: 100%;
+  height: auto;
 }
 
 .group {
