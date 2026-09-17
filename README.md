@@ -136,10 +136,11 @@ that is one draw per second, and a 1-frame still draws once and then stops.
 
 GIF uses a **single palette derived from all frames**. Quantising each frame
 separately makes flat surfaces shimmer as the palette is re-derived per frame.
-An optional **Dither GIF** checkbox adds Floyd–Steinberg error diffusion, which
+**Dither GIF**, on by default, adds Floyd–Steinberg error diffusion, which
 smooths gradients across the 256-colour limit at the cost of a noisier, larger
-file. gifenc has no dithering of its own, so it is implemented in
-`src/encoders/gif.js`.
+file. Turn it off for flat-shaded models, where the banding it fixes does not
+arise and the added noise costs file size for nothing. gifenc has no dithering
+of its own, so it is implemented in `src/encoders/gif.js`.
 
 ## How it works
 
