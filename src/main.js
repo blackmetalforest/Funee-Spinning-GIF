@@ -543,6 +543,22 @@ $('show-axis').addEventListener('change', () => {
   scene.render();
 });
 
+/*
+ * Clicking the wordmark plays a short theme. The Audio object is built on the
+ * first click rather than at load: it is 10 KB nobody needs unless they ask for
+ * it, and a click is the user gesture browsers require before audio may start
+ * at all. Rewinding first makes an impatient second click restart it instead of
+ * doing nothing.
+ */
+let theme = null;
+$('app-logo').addEventListener('click', () => {
+  if (!theme) theme = new Audio('./content/Funee%20GIF%20Maker.opus');
+  theme.currentTime = 0;
+  // Safari has never played Opus in an Ogg container; there is nothing to do
+  // about that here beyond not letting the rejection reach the console.
+  theme.play().catch(() => {});
+});
+
 $('browse').addEventListener('click', () => $('file-input').click());
 $('browse-empty').addEventListener('click', () => $('file-input').click());
 $('file-input').accept = FILE_ACCEPT;

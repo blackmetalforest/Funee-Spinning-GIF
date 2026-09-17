@@ -206,6 +206,8 @@ The sliders use `touch-action: pan-y` so a vertical swipe scrolls even when it
 starts on a slider, and every control row leaves a 56 px strip clear down the
 right-hand side as a guaranteed-safe place to put a thumb.
 
+Clicking the wordmark plays a short theme.
+
 ## Tests
 
 ```bash
