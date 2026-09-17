@@ -32,8 +32,18 @@
       <div id="busy" hidden><div class="spinner"></div><span id="busy-text">Working…</span></div>
     </div>
     <div id="view-foot">
-      <span id="view-note" class="muted">Drag to orbit · scroll wheel not required</span>
-      <span id="view-size" class="muted"></span>
+      <div class="view-toggles">
+        <label><input type="checkbox" id="show-axis"
+               title="Marks the rotation axis with a red arrow so you can see whether the model sits on it. Preview only — it is always off while frames are rendered."> Center axis</label>
+        <label><input type="checkbox" id="show-border"
+               title="Outlines the exact edge of the exported image so you can see what will be cropped. Preview only — it never appears in the output."> Image border</label>
+      </div>
+      <div class="view-status">
+        <label><input type="checkbox" id="preview"
+               title="Spins the model live at the output's real frame rate, including GIF's 10 ms timing grid. Preview only — it never affects the export."> Preview</label>
+        <output id="preview-fps"></output>
+        <span id="view-size" class="muted"></span>
+      </div>
     </div>
   </section>
 
@@ -69,6 +79,26 @@
       <div class="row actions"><button id="reset-view">Reset to defaults</button></div>
     </section>
 
+
+    <section class="group">
+      <h2>Spin</h2>
+      <div class="row"><label for="direction">Direction</label>
+        <select id="direction">
+          <option value="cw" selected>Clockwise</option>
+          <option value="ccw">Counter-clockwise</option>
+        </select></div>
+      <div class="row"><label for="speed">Spin speed</label>
+        <input type="range" id="speed" min="0" max="10" step="0.01" value="0.25">
+        <output for="speed" id="speed-out">0.25 r/s</output></div>
+      <div class="row"><label for="fps">Frame rate</label>
+        <input type="range" id="fps" min="0" max="60" step="1" value="12">
+        <output for="fps" id="fps-out">12 fps</output></div>
+      <div class="row"><label>Frames</label>
+        <span class="muted small" id="frames-note">frame rate ÷ spin speed</span>
+        <output id="frames-out">48</output></div>
+      <p id="loop-info" class="muted small">—</p>
+    </section>
+
     <section class="group">
       <h2>Position</h2>
       <div class="row"><label for="up-axis">Up axis</label>
@@ -97,33 +127,7 @@
       <div class="row"><label for="roll">Roll</label>
         <input type="range" id="roll" min="-180" max="180" step="1" value="0">
         <output for="roll" id="roll-out">0°</output></div>
-      <div class="row"><label for="show-axis">Show center axis</label>
-        <input type="checkbox" id="show-axis"
-               title="Marks the rotation axis with a red arrow so you can see whether the model sits on it. Preview only — it is always off while frames are rendered."></div>
       <div class="row actions"><button id="reset-position">Reset to defaults</button></div>
-    </section>
-
-    <section class="group">
-      <h2>Spin</h2>
-      <div class="row"><label for="speed">Spin speed</label>
-        <input type="range" id="speed" min="0.01" max="10" step="0.01" value="0.25">
-        <output for="speed" id="speed-out">0.25 r/s</output></div>
-      <div class="row"><label for="fps">Frame rate</label>
-        <input type="range" id="fps" min="1" max="100" step="1" value="12">
-        <output for="fps" id="fps-out">12 fps</output></div>
-      <div class="row"><label>Frames</label>
-        <span class="muted small" id="frames-note">frame rate ÷ spin speed</span>
-        <output id="frames-out">48</output></div>
-      <div class="row"><label for="direction">Direction</label>
-        <select id="direction">
-          <option value="cw" selected>Clockwise</option>
-          <option value="ccw">Counter-clockwise</option>
-        </select></div>
-      <div class="row"><label for="preview">Preview</label>
-        <input type="checkbox" id="preview"
-               title="Spins the model live at the output's real frame rate, including GIF's 10 ms timing grid. Preview only — it never affects the export.">
-        <output id="preview-fps"></output></div>
-      <p id="loop-info" class="muted small">—</p>
     </section>
 
     <section class="group">
@@ -154,9 +158,6 @@
         <input type="checkbox" id="transparent" checked></div>
       <div class="row"><label for="textures">Textures</label>
         <input type="checkbox" id="textures" checked></div>
-      <div class="row"><label for="show-border">Image border</label>
-        <input type="checkbox" id="show-border"
-               title="Outlines the exact edge of the exported image so you can see what will be cropped. Preview only — it never appears in the output."></div>
     </section>
 
     <section class="group">

@@ -15,7 +15,8 @@ no build step and no backend — it's a static site.
 - Produces a **seamless loop** — frame *i* sits at exactly `i × 360/N` degrees,
   so the last frame steps into the first with no repeated pose
 - Takes a spin speed and a frame rate and works out the frame count for you,
-  flagging it when that count gets expensive
+  flagging it when that count gets expensive. Either one at zero is a stopped
+  spin, which exports as a single still
 - Keeps **exact timing** — 48 frames at 0.25 rounds/s totals 4.000 s, not 3.97
 - Exports with real transparency
 
@@ -90,8 +91,10 @@ place, Start rotation carries it around the pivot.
 
 ## Preview
 
-A **Preview** checkbox at the bottom of the Spin section (off by default) spins
-the model live while every other control stays adjustable.
+A **Preview** checkbox under the render view (off by default) spins the model
+live while every other control stays adjustable. It sits with **Center axis**
+and **Image border**: the three toggles that change what the preview shows
+without changing a thing about the export.
 
 It replays the encoder's own delay table rather than spinning smoothly, so what
 you see is the cadence the file will have — including the judder GIF's 10 ms

@@ -80,21 +80,36 @@ function readSettings() {
 const FRAMES_HEAVY = 300;      // slow to render, and a GIF well past 10 MB
 const FRAMES_MAX = 1000;       // hard ceiling: beyond this a phone runs out of memory
 
+/*
+ * Below this the spin reads as stopped rather than slow, so the slider's bottom
+ * end snaps to zero instead of offering speeds nobody wants: 0.01 rounds/s is
+ * a hundred seconds a turn, which is a still with extra steps.
+ */
+const MIN_RPS = 0.05;
+
+function snapSpeed(value) {
+  return value < MIN_RPS ? 0 : value;
+}
+
+/*
+ * Frames are derived: frame rate x seconds per turn. Either input at zero means
+ * nothing moves, which is one still frame — not a division by zero, and not the
+ * thousand frames that 1/0 would otherwise clamp to.
+ */
 function framesFor(fps, rps) {
-  const ideal = fps / Math.max(1e-6, rps);
+  if (!(fps > 0) || !(rps > 0)) return { frames: 1, ideal: 1, stopped: true };
+  const ideal = Math.round(fps / rps);
   return {
-    frames: Math.max(1, Math.min(FRAMES_MAX, Math.round(ideal))),
-    ideal: Math.round(ideal),
+    frames: Math.max(1, Math.min(FRAMES_MAX, ideal)),
+    ideal,
+    stopped: false,
   };
 }
 
 function readSpin() {
-  const rps = +$('speed').value;
-  return {
-    frames: framesFor(+$('fps').value, rps).frames,
-    rps,
-    clockwise: $('direction').value === 'cw',
-  };
+  const rps = snapSpeed(+$('speed').value);
+  const { frames, stopped } = framesFor(+$('fps').value, rps);
+  return { frames, rps, stopped, clockwise: $('direction').value === 'cw' };
 }
 
 function clampInt(value, lo, hi, fallback) {
@@ -109,8 +124,10 @@ function syncOutputs() {
   $('start-out').textContent = `${$('start').value}°`;
   $('fov-out').textContent = `${$('fov').value}°`;
   $('zoom-out').textContent = `${(+$('zoom').value).toFixed(2)}×`;
-  $('speed-out').textContent = `${(+$('speed').value).toFixed(2)} r/s`;
-  $('fps-out').textContent = `${$('fps').value} fps`;
+  const rps = snapSpeed(+$('speed').value);
+  const fps = +$('fps').value;
+  $('speed-out').textContent = rps > 0 ? `${rps.toFixed(2)} r/s` : 'stopped';
+  $('fps-out').textContent = fps > 0 ? `${fps} fps` : 'stopped';
   syncFrameCount();
   for (const id of ['ambient', 'key', 'fill', 'rim', 'specular']) {
     $(`${id}-out`).textContent = (+$(id).value).toFixed(2);
@@ -131,9 +148,14 @@ function syncOutputs() {
  * which the loop summary underneath then shows as a lower figure.
  */
 function syncFrameCount() {
-  const { frames, ideal } = framesFor(+$('fps').value, +$('speed').value);
+  const { frames, ideal, stopped } = framesFor(+$('fps').value, snapSpeed(+$('speed').value));
   const out = $('frames-out');
   out.textContent = frames;
+  if (stopped) {
+    out.classList.remove('warn', 'caution');
+    $('frames-note').textContent = 'stopped — a single still';
+    return;
+  }
   // Red at the ceiling, whether or not anything was actually trimmed: sitting
   // exactly on the cap is still the point where the app stops obliging.
   out.classList.toggle('warn', frames >= FRAMES_MAX);
@@ -145,6 +167,12 @@ function syncFrameCount() {
 
 function updateLoopInfo() {
   const spin = readSpin();
+  if (spin.stopped) {
+    // Quoting a turn length or a rate here would be inventing numbers: with
+    // nothing moving there is no turn to time.
+    $('loop-info').textContent = '1 frame · still — nothing is spinning';
+    return;
+  }
   // GIF has the coarsest timing grid, so it's the honest one to quote.
   const info = loopSummary(spin.frames, spin.rps, 'gif');
   const fps = info.fps.toFixed(1);
@@ -383,6 +411,9 @@ function schedulePreview() {
 }
 
 function applyAndPreview() {
+  // Rewrite the control, not just the reading, so the thumb visibly lands on
+  // zero rather than sitting in a dead zone that behaves as stopped.
+  if (+$('speed').value > 0 && +$('speed').value < MIN_RPS) $('speed').value = 0;
   syncOutputs();
   updateLoopInfo();
   updateViewSize();

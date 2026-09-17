@@ -33,10 +33,20 @@ export function roundHalfToEven(value) {
   return floor % 2 === 0 ? floor : floor + 1;
 }
 
+/*
+ * A stopped spin — zero speed, or zero frames per second — is a single still.
+ * The delay no longer means anything, but it still has to be a number the
+ * containers can hold: GIF stores hundredths of a second in 16 bits, so a
+ * delay derived from 1/0 would wrap to something arbitrary rather than simply
+ * being ignored.
+ */
+export const STILL_DELAY_MS = 1000;
+
 /** Per-frame delays in ms, rounded onto the format's grid without drifting. */
 export function frameDelaysMs(nFrames, rps, fmt = 'gif') {
   const grid = DELAY_GRID_MS[fmt] ?? 10;
   const n = Math.max(1, Math.floor(nFrames));
+  if (!(rps > 0)) return new Array(n).fill(STILL_DELAY_MS);
   const total = 1000.0 / Math.max(1e-6, rps);
   const delays = [];
   let elapsed = 0;

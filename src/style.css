@@ -144,7 +144,34 @@ html, body {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-#view-foot { display: flex; justify-content: space-between; gap: 12px; }
+/*
+ * The view's own controls: things that change what the preview shows without
+ * changing what gets exported. They live here rather than in the settings list
+ * because they are about looking, not about the output.
+ */
+#view-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px 18px;
+  flex-wrap: wrap;
+}
+.view-toggles, .view-status { display: flex; align-items: center; gap: 16px; }
+#view-foot label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+#view-foot input[type="checkbox"] { width: 16px; height: 16px; margin: 0; }
+#preview-fps {
+  min-width: 58px;
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
 
 /* --------------------------------------------------------------- panel */
 
