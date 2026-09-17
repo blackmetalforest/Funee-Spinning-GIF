@@ -39,6 +39,36 @@ untextured — converting to GLB fixes it. The app tells you when it spots this.
 Not supported: `.off` (no three.js loader), VRML (needs a large extra parser),
 and KTX2/Basis textures.
 
+## Position
+
+An optional **Position** section moves the model around the rotation point —
+X/Y/Z translation plus pitch/yaw/roll. Most models need none of it, so every
+control defaults to zero.
+
+Translation is in **bounding-sphere radii**: the model is normalised to radius 1
+on load, so 1.0 shifts it by its own radius whatever its real-world scale.
+Rotations apply in YXZ order (yaw, then pitch, then roll).
+
+The adjustment is applied *inside* the spin pivot, so the rotation point stays
+at the origin: translating displaces the model relative to that point and it
+orbits as it spins, rather than just sliding across the frame. Framing does not
+follow the model, so a large offset will clip — the **Image border** checkbox
+shows where the crop falls, and **Zoom** compensates. An off-axis model also
+sweeps a wider circle when spinning than it appears to at frame 0.
+
+**Show centre axis** draws a red arrow along the rotation axis so you can see
+whether the model sits on it. Its length is fixed **once, when the model loads**
+— tip clear of the top, base just below the bottom — and clamped to stay inside
+the frame, because a clipped cone reads as a blunt bar rather than an arrow.
+Keeping it fixed is what makes it a useful reference: a re-measured arrow
+changes size as the model moves, which is exactly the comparison you are trying
+to make. It is preview-only and is forced off while frames are rendered, so it
+can never appear in an export.
+
+Note that **Yaw and Start rotation look identical while the model is centred** —
+both turn it about Y. They diverge once X/Z is non-zero: yaw turns the model in
+place, Start rotation carries it around the pivot.
+
 ## Output formats
 
 | Format | Colour | Transparency | Timing | Notes |

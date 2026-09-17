@@ -50,19 +50,28 @@ export async function captureFrames(scene, spin, onProgress) {
   const resolve = makeResolver(width, height);
   const blobs = [];
 
-  for (let i = 0; i < angles.length; i++) {
-    scene.setAngle(angles[i]);
-    scene.render();
+  // The centre-axis guide is a preview aid and must never reach the output.
+  // try/finally so it comes back even if the render is cancelled or throws.
+  const axisWasVisible = scene.axisArrow?.visible ?? false;
+  if (axisWasVisible) scene.setAxisVisible(false);
 
-    // PNG keeps the frame store lossless; see the note at the top of the file.
-    const png = encodePng(resolve(scene.canvas));
-    blobs.push(new Blob([png], { type: 'image/png' }));
+  try {
+    for (let i = 0; i < angles.length; i++) {
+      scene.setAngle(angles[i]);
+      scene.render();
 
-    if (onProgress && onProgress(i + 1, angles.length) === false) return null;
-    // Yield so the progress bar can actually paint between frames.
-    if ((i & 3) === 3) await new Promise((r) => setTimeout(r, 0));
+      // PNG keeps the frame store lossless; see the note at the top of the file.
+      const png = encodePng(resolve(scene.canvas));
+      blobs.push(new Blob([png], { type: 'image/png' }));
+
+      if (onProgress && onProgress(i + 1, angles.length) === false) return null;
+      // Yield so the progress bar can actually paint between frames.
+      if ((i & 3) === 3) await new Promise((r) => setTimeout(r, 0));
+    }
+    return { blobs, width, height };
+  } finally {
+    if (axisWasVisible) scene.setAxisVisible(true);
   }
-  return { blobs, width, height };
 }
 
 /** Decode stored frames back to ImageData for the encoders that need pixels. */

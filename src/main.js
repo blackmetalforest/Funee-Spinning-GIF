@@ -29,7 +29,11 @@ let rendering = false;
 /* ------------------------------------------------------------ settings */
 
 const RANGE_IDS = ['elevation', 'start', 'fov', 'zoom', 'speed', 'frames',
-  'ambient', 'key', 'fill', 'rim', 'specular', 'shininess'];
+  'ambient', 'key', 'fill', 'rim', 'specular', 'shininess',
+  'pos-x', 'pos-y', 'pos-z', 'pitch', 'yaw', 'roll'];
+
+// Position sliders change the render, so they must also drop the frame store.
+const POSITION_IDS = ['pos-x', 'pos-y', 'pos-z', 'pitch', 'yaw', 'roll'];
 
 const FORMAT_LABELS = { gif: 'GIF', webp: 'WebP', apng: 'APNG', zip: 'ZIP' };
 
@@ -41,6 +45,12 @@ function readSettings() {
     elevation: +$('elevation').value,
     startAngle: +$('start').value,
     upAxis: $('up-axis').value,
+    posX: +$('pos-x').value,
+    posY: +$('pos-y').value,
+    posZ: +$('pos-z').value,
+    pitch: +$('pitch').value,
+    yaw: +$('yaw').value,
+    roll: +$('roll').value,
     fov: +$('fov').value,
     zoom: +$('zoom').value,
     background: $('background').value,
@@ -81,6 +91,12 @@ function syncOutputs() {
     $(`${id}-out`).textContent = (+$(id).value).toFixed(2);
   }
   $('shininess-out').textContent = $('shininess').value;
+  for (const id of ['pos-x', 'pos-y', 'pos-z']) {
+    $(`${id}-out`).textContent = (+$(id).value).toFixed(2);
+  }
+  for (const id of ['pitch', 'yaw', 'roll']) {
+    $(`${id}-out`).textContent = `${$(id).value}°`;
+  }
 }
 
 function updateLoopInfo() {
@@ -191,6 +207,10 @@ for (const id of ['up-axis', 'direction', 'quality', 'background', 'transparent'
   $(id).addEventListener('input', () => { discardStore(); applyAndPreview(); });
 }
 
+for (const id of POSITION_IDS) {
+  $(id).addEventListener('input', discardStore);
+}
+
 $('square').addEventListener('change', () => {
   if ($('square').checked) $('height').value = $('width').value;
   applyAndPreview();
@@ -217,6 +237,17 @@ $('reset-view').addEventListener('click', () => {
   applyAndPreview();
 });
 
+$('reset-position').addEventListener('click', () => {
+  $('pos-x').value = DEFAULT_SETTINGS.posX;
+  $('pos-y').value = DEFAULT_SETTINGS.posY;
+  $('pos-z').value = DEFAULT_SETTINGS.posZ;
+  $('pitch').value = DEFAULT_SETTINGS.pitch;
+  $('yaw').value = DEFAULT_SETTINGS.yaw;
+  $('roll').value = DEFAULT_SETTINGS.roll;
+  discardStore();
+  applyAndPreview();
+});
+
 $('reset-render').addEventListener('click', () => {
   $('ambient').value = DEFAULT_SETTINGS.ambient;
   $('key').value = DEFAULT_SETTINGS.keyLight;
@@ -227,10 +258,15 @@ $('reset-render').addEventListener('click', () => {
   applyAndPreview();
 });
 
-// Preview-only guide: deliberately not part of readSettings(), so toggling it
-// neither re-renders nor throws away an existing frame store.
+// Preview-only guides: deliberately not part of readSettings(), so toggling
+// them neither re-renders nor throws away an existing frame store.
 $('show-border').addEventListener('change', () => {
   canvas.classList.toggle('show-border', $('show-border').checked);
+});
+
+$('show-axis').addEventListener('change', () => {
+  scene.setAxisVisible($('show-axis').checked);
+  scene.render();
 });
 
 $('browse').addEventListener('click', () => $('file-input').click());

@@ -24,6 +24,15 @@ export const DEFAULT_SETTINGS = {
   elevation: 20,
   startAngle: 0,
   upAxis: 'Y',
+  // Position adjustments, applied around the rotation point. Translation is in
+  // bounding-sphere radii (the model is normalised to radius 1), so 1.0 shifts
+  // it by its own radius regardless of the model's real-world scale.
+  posX: 0,
+  posY: 0,
+  posZ: 0,
+  pitch: 0,
+  yaw: 0,
+  roll: 0,
   fov: 35,
   zoom: 1.0,
   background: '#181a20',
@@ -58,10 +67,19 @@ export class SpinScene {
     this.pivot = new THREE.Group();
     this.scene.add(this.pivot);
 
+    // User position/rotation lives *inside* the pivot, so the rotation point
+    // stays at the origin: translating displaces the model relative to that
+    // point (it then orbits as it spins) and rotating pivots it about that
+    // point rather than about its own centre.
+    this.adjust = new THREE.Group();
+    this.adjust.rotation.order = 'YXZ';        // yaw, then pitch, then roll
+    this.pivot.add(this.adjust);
+
     this.model = null;
     this.settings = { ...DEFAULT_SETTINGS };
     this.rimUniforms = [];
     this.buildLights();
+    this.buildAxisArrow();
   }
 
   /**
@@ -92,16 +110,107 @@ export class SpinScene {
   }
 
   /**
+   * A red arrow marking the rotation axis.
+   *
+   * Built from a cylinder plus a cone rather than three.js's ArrowHelper,
+   * which draws a one-pixel line for the shaft. MeshBasicMaterial keeps it
+   * unlit so it reads the same at any lighting setting.
+   *
+   * It is a sibling of the pivot, not a child, so it stays put while the model
+   * turns around it — that is what makes it useful for judging whether the
+   * model actually sits on the axis. setAngle() always spins about world Y
+   * regardless of the up-axis setting, so world Y is the axis to mark.
+   */
+  buildAxisArrow() {
+    const material = new THREE.MeshBasicMaterial({ color: 0xe02020 });
+    // Unit-height primitives; sizeAxisArrow() scales and places them.
+    this.axisShaft = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 20), material);
+    this.axisHead = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 20), material);
+    this.axisArrow = new THREE.Group();
+    this.axisArrow.add(this.axisShaft, this.axisHead);
+    this.axisArrow.visible = false;              // off by default
+    this.axisRequested = false;                  // what the checkbox asked for
+    this.scene.add(this.axisArrow);
+  }
+
+  /**
+   * Show or hide the guide. Always forced off while frames are captured.
+   *
+   * The request is remembered separately from the actual visibility so that
+   * ticking the box before loading a model still shows the arrow once one
+   * arrives — there is nothing to size it against until then.
+   */
+  setAxisVisible(visible) {
+    this.axisRequested = !!visible;
+    this.axisArrow.visible = this.axisRequested && !!this.model;
+  }
+
+  /**
+   * Size the arrow so it brackets the model: tip clear of the top, base just
+   * below the bottom.
+   *
+   * Computed **once, when a model is loaded**, and measured from the model
+   * itself rather than from the adjusted group. Re-measuring on every change
+   * made the arrow visibly shrink as the model was moved up: the tip stayed
+   * pinned at the frame clamp while the rising bounding box pushed the base up
+   * behind it. A fixed reference also makes it far more useful — the whole
+   * point is to judge how the model has moved relative to a stationary axis.
+   *
+   * Normal depth testing means the shaft is hidden inside the model and only
+   * the ends protrude, which is precisely why the ends need that clearance.
+   */
+  sizeAxisArrow() {
+    if (!this.model) return;
+
+    this.model.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(this.model);
+    if (box.isEmpty()) return;
+
+    const height = Math.max(1e-3, box.max.y - box.min.y);
+    const pad = Math.max(0.02, height * 0.05);
+    const headLength = Math.max(0.06, height * 0.12);
+    const shaftRadius = Math.max(0.005, height * 0.006);
+
+    // Keep the whole arrow inside the frame. Rotating or moving the model
+    // inflates its bounding box, which can push the tip off-screen — and a
+    // clipped cone reads as a blunt red bar rather than an arrow, which looks
+    // broken. Clamping keeps the head visible; in the common case (centred,
+    // unrotated) the limit is never reached and the tip clears the model as
+    // intended.
+    const limit = (this.frameHalfHeight || 1) * 0.95;
+    let base = Math.max(box.min.y - pad, -limit);
+    let tip = Math.min(box.max.y + pad + headLength, limit);
+    if (tip - base < headLength * 1.5) {
+      // Degenerate span (tiny frame or huge model): keep a recognisable arrow.
+      base = tip - headLength * 1.5;
+    }
+    const shaftLength = Math.max(1e-3, tip - base - headLength);
+
+    this.axisShaft.scale.set(shaftRadius, shaftLength, shaftRadius);
+    this.axisShaft.position.set(0, base + shaftLength / 2, 0);
+
+    this.axisHead.scale.set(shaftRadius * 3, headLength, shaftRadius * 3);
+    this.axisHead.position.set(0, tip - headLength / 2, 0);
+  }
+
+  /**
    * Swap in a loaded model: normalise it to a unit bounding sphere at the
    * origin, so every downstream calculation can assume radius 1.
    */
   setModel(object) {
     if (this.model) {
-      this.pivot.remove(this.model);
+      this.adjust.remove(this.model);
       disposeTree(this.model);
     }
     this.model = object;
-    this.pivot.add(object);
+    this.adjust.add(object);
+
+    // Measure with the adjustment group at identity. The normalisation below
+    // reads world matrices, so leaving a user offset applied here would fold it
+    // into the measured radius and mis-scale every subsequent model.
+    this.adjust.position.set(0, 0, 0);
+    this.adjust.rotation.set(0, 0, 0);
+    this.adjust.updateMatrixWorld(true);
 
     // Centre on the bounding-box centre, then scale by the *true* bounding
     // sphere radius. Box3.getBoundingSphere() returns the sphere around the
@@ -118,6 +227,12 @@ export class SpinScene {
 
     this.applyMaterials();
     this.applySettings(this.settings);
+
+    // Fixed for the lifetime of this model: sized after applySettings so the
+    // camera (and therefore the frame clamp) is up to date, but measured from
+    // the model alone so user position offsets never feed into it.
+    this.sizeAxisArrow();
+    this.axisArrow.visible = this.axisRequested;
   }
 
   /**
@@ -203,6 +318,14 @@ export class SpinScene {
       });
     }
 
+    // User position/rotation, applied around the rotation point.
+    this.adjust.position.set(s.posX, s.posY, s.posZ);
+    this.adjust.rotation.set(
+      THREE.MathUtils.degToRad(s.pitch),
+      THREE.MathUtils.degToRad(s.yaw),
+      THREE.MathUtils.degToRad(s.roll),
+    );
+
     // Up-axis correction: rotate the model so its own up points along world +Y.
     this.pivot.rotation.set(0, 0, 0);
     if (s.upAxis === 'Z') this.pivot.rotateX(-Math.PI / 2);
@@ -235,6 +358,11 @@ export class SpinScene {
     const half = Math.atan(Math.min(Math.tan(fov / 2), Math.tan(fov / 2) * aspect));
     const dist = (radius * margin) / Math.sin(half);
     const elev = THREE.MathUtils.degToRad(Math.max(-89.5, Math.min(89.5, s.elevation)));
+
+    // Half the visible height at the origin plane. Used to keep the axis guide
+    // inside the frame; a vertical line foreshortens as the camera is raised,
+    // so this is a conservative (safe) bound at any elevation.
+    this.frameHalfHeight = Math.tan(fov / 2) * dist;
 
     this.camera.fov = THREE.MathUtils.radToDeg(fov);
     this.camera.aspect = aspect;

@@ -75,6 +75,34 @@
     </section>
 
     <section class="group">
+      <h2>Position</h2>
+      <p class="muted small">Moves the model around the rotation point. Most
+        models need no adjustment.</p>
+      <div class="row"><label for="pos-x">Move X</label>
+        <input type="range" id="pos-x" min="-2" max="2" step="0.01" value="0">
+        <output for="pos-x" id="pos-x-out">0.00</output></div>
+      <div class="row"><label for="pos-y">Move Y</label>
+        <input type="range" id="pos-y" min="-2" max="2" step="0.01" value="0">
+        <output for="pos-y" id="pos-y-out">0.00</output></div>
+      <div class="row"><label for="pos-z">Move Z</label>
+        <input type="range" id="pos-z" min="-2" max="2" step="0.01" value="0">
+        <output for="pos-z" id="pos-z-out">0.00</output></div>
+      <div class="row"><label for="pitch">Pitch</label>
+        <input type="range" id="pitch" min="-180" max="180" step="1" value="0">
+        <output for="pitch" id="pitch-out">0°</output></div>
+      <div class="row"><label for="yaw">Yaw</label>
+        <input type="range" id="yaw" min="-180" max="180" step="1" value="0">
+        <output for="yaw" id="yaw-out">0°</output></div>
+      <div class="row"><label for="roll">Roll</label>
+        <input type="range" id="roll" min="-180" max="180" step="1" value="0">
+        <output for="roll" id="roll-out">0°</output></div>
+      <div class="row"><label for="show-axis">Show centre axis</label>
+        <input type="checkbox" id="show-axis"
+               title="Marks the rotation axis with a red arrow so you can see whether the model sits on it. Preview only — it is always off while frames are rendered."></div>
+      <div class="row actions"><button id="reset-position">Reset to defaults</button></div>
+    </section>
+
+    <section class="group">
       <h2>Spin</h2>
       <div class="row"><label for="speed">Spin speed</label>
         <input type="range" id="speed" min="0.01" max="10" step="0.01" value="0.25">
