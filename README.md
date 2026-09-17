@@ -49,12 +49,22 @@ Translation is in **bounding-sphere radii**: the model is normalised to radius 1
 on load, so 1.0 shifts it by its own radius whatever its real-world scale.
 Rotations apply in YXZ order (yaw, then pitch, then roll).
 
+The camera's depth planes follow the offset, so moving the model toward the lens
+does not clip it. They used to be fitted to the origin alone, which gave a fixed
+1.05 radii of clearance no matter where the camera was — Field of view and Zoom
+never clipped, because they move the near plane along with the camera, but a
+Move Z of much past 0.75 sliced the model apart and then lost it altogether.
+Above roughly FOV 100 the camera itself sits close enough that a large Move Z
+puts the model through the lens, which no clipping plane can render; **Zoom**
+out pushes the camera back and gives the full range again.
+
 The adjustment is applied *inside* the spin pivot, so the rotation point stays
 at the origin: translating displaces the model relative to that point and it
 orbits as it spins, rather than just sliding across the frame. Framing does not
-follow the model, so a large offset will clip — the **Image border** checkbox
-shows where the crop falls, and **Zoom** compensates. An off-axis model also
-sweeps a wider circle when spinning than it appears to at frame 0.
+follow the model, so a large offset will run outside the frame — the **Image
+border** checkbox shows where the crop falls, and **Zoom** compensates. An
+off-axis model also sweeps a wider circle when spinning than it appears to at
+frame 0.
 
 **Show centre axis** draws a red arrow along the rotation axis so you can see
 whether the model sits on it. Its length is fixed **once, when the model loads**

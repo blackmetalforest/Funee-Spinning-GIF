@@ -364,10 +364,35 @@ export class SpinScene {
     // so this is a conservative (safe) bound at any elevation.
     this.frameHalfHeight = Math.tan(fov / 2) * dist;
 
+    // How far a vertex can travel toward or away from the lens once the user has
+    // offset the model. setModel() normalises the model into a unit sphere about
+    // the adjust group's origin, so every vertex stays within `radius` of that
+    // point, and the group itself sits at most hypot(posX, posY, posZ) from the
+    // pivot centre — a distance the spin and the up-axis correction can turn to
+    // point straight at the camera. So this bound is exact, not a guess, and
+    // rotations need no term of their own (a sphere is rotation-invariant).
+    const reach = Math.hypot(s.posX, s.posY, s.posZ);
+
     this.camera.fov = THREE.MathUtils.radToDeg(fov);
     this.camera.aspect = aspect;
-    this.camera.near = Math.max(1e-4, dist - radius * 1.05);
-    this.camera.far = dist + radius * 2.0;
+    // The depth planes must follow that offset. Fitted to the origin alone they
+    // give a *fixed* 1.05 radii of clearance however the camera is placed, so
+    // FOV and Zoom never clip (they move the near plane with the camera) while a
+    // modest Move Z slices the model away and then loses it entirely.
+    //
+    // Widening is close to free: near/far feed nothing but the projection
+    // matrix — no shadow maps, no fog, no depth-based shading — so this changes
+    // what is clipped and nothing about how anything looks. It costs a little
+    // depth precision, against which a 24-bit buffer has orders of magnitude of
+    // headroom at these ranges. With every Position control at 0, `reach` is 0
+    // and both planes come out exactly as they did before.
+    //
+    // The floor keeps the near:far ratio sane. Geometry nearer than that is
+    // inside the lens, where no choice of plane can draw it sensibly — reachable
+    // by combining a very wide FOV (which parks the camera close) with a large
+    // offset, and cured by zooming out.
+    this.camera.near = Math.max(dist * 0.01, dist - (radius * 1.05 + reach));
+    this.camera.far = dist + radius * 2.0 + reach;
     this.camera.position.set(0, Math.sin(elev) * dist, Math.cos(elev) * dist);
     this.camera.lookAt(0, 0, 0);
     this.camera.updateProjectionMatrix();
