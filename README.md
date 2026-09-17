@@ -1,4 +1,4 @@
-<img src="Funee%20Spinning%20GIF%20Maker%20Big.webp" alt="Funee Spinning GIF Maker" width="826">
+<img src="content/Funee%20Spinning%20GIF%20Maker%20Big.webp" alt="Funee Spinning GIF Maker" width="826">
 
 Drop in a 3D model, get a perfectly looping spin animation. Export it as a GIF,
 animated WebP, APNG, or a ZIP of frames.
@@ -242,7 +242,7 @@ src/encoders/
   apng.js             APNG muxer
   frames.js           ZIP of frames
 vendor/               three.js r186, Draco, gifenc, fflate (all pinned)
-sample.glb            small test model so the page has something to show
+content/              wordmarks, the theme clip, and a small test model
 ```
 
 ## Credits
