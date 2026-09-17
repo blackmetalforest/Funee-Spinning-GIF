@@ -70,13 +70,17 @@ frame 0.
 any of the adjustments below it apply.
 
 **Show center axis** draws a red arrow along the rotation axis so you can see
-whether the model sits on it. Its length is fixed **once, when the model loads**
-— tip clear of the top, base just below the bottom — and clamped to stay inside
-the frame, because a clipped cone reads as a blunt bar rather than an arrow.
-Keeping it fixed is what makes it a useful reference: a re-measured arrow
-changes size as the model moves, which is exactly the comparison you are trying
-to make. It is preview-only and is forced off while frames are rendered, so it
-can never appear in an export.
+whether the model sits on it. It also flashes up on its own whenever a Position
+control moves — two seconds at full strength, then a two-second fade — so the
+reference is there exactly while it is being used and gone the rest of the time.
+The checkbox pins it on permanently and overrides the flash.
+
+Its length is fixed **once, when the model loads** — tip clear of the top, base
+just below the bottom — and clamped to stay inside the frame, because a clipped
+cone reads as a blunt bar rather than an arrow. Keeping it fixed is what makes
+it a useful reference: a re-measured arrow changes size as the model moves,
+which is exactly the comparison you are trying to make. It is preview-only and
+is forced off while frames are rendered, so it can never appear in an export.
 
 Note that **Yaw and Start rotation look identical while the model is centred** —
 both turn it about Y. They diverge once X/Z is non-zero: yaw turns the model in

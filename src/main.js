@@ -137,6 +137,60 @@ function setSaveEnabled(enabled) {
 /* -------------------------------------------------------------- render */
 
 let previewHandle = 0;
+/*
+ * The centre-axis guide flashes up whenever a Position control moves, so the
+ * reference is on screen exactly while it is being used and then gets out of
+ * the way. Full strength for FLASH_HOLD_MS, then faded over FLASH_FADE_MS.
+ *
+ * Opacity is derived from the clock rather than stepped per frame: rAF stops
+ * in a backgrounded tab, and a per-frame step would resume mid-fade and
+ * stretch it. During the hold the opacity does not change, so no redraw is
+ * issued either — the loop only renders on the frames that actually differ.
+ */
+const FLASH_HOLD_MS = 2000;
+const FLASH_FADE_MS = 2000;
+let flashEndsAt = 0;
+let flashHandle = 0;
+let flashOpacity = -1;
+
+function stopAxisFlash() {
+  cancelAnimationFrame(flashHandle);
+  flashHandle = 0;
+  flashEndsAt = 0;
+  flashOpacity = -1;
+  scene.setAxisOpacity(1);
+  scene.setAxisVisible($('show-axis').checked);
+}
+
+function flashAxis() {
+  // The checkbox wins: with the guide pinned on there is nothing to flash. It
+  // also stays away entirely while frames are being captured, so a fade can
+  // never bleed into an export.
+  if ($('show-axis').checked || rendering || !scene.model) return;
+
+  flashEndsAt = performance.now() + FLASH_HOLD_MS + FLASH_FADE_MS;
+  scene.setAxisVisible(true);
+  if (flashHandle) return;                  // already running; it reads the new deadline
+
+  const step = () => {
+    const remaining = flashEndsAt - performance.now();
+    if (remaining <= 0) {
+      stopAxisFlash();
+      scene.render();
+      return;
+    }
+    const opacity = Math.min(1, remaining / FLASH_FADE_MS);
+    if (opacity !== flashOpacity) {
+      scene.setAxisOpacity(opacity);
+      flashOpacity = opacity;
+      scene.render();
+    }
+    flashHandle = requestAnimationFrame(step);
+  };
+  flashOpacity = -1;                        // force the first frame to draw
+  flashHandle = requestAnimationFrame(step);
+}
+
 function schedulePreview() {
   cancelAnimationFrame(previewHandle);
   previewHandle = requestAnimationFrame(() => {
@@ -208,7 +262,7 @@ for (const id of ['up-axis', 'direction', 'quality', 'background', 'transparent'
 }
 
 for (const id of POSITION_IDS) {
-  $(id).addEventListener('input', discardStore);
+  $(id).addEventListener('input', () => { discardStore(); flashAxis(); });
 }
 
 $('square').addEventListener('change', () => {
@@ -246,6 +300,7 @@ $('reset-position').addEventListener('click', () => {
   $('roll').value = DEFAULT_SETTINGS.roll;
   discardStore();
   applyAndPreview();
+  flashAxis();
 });
 
 $('reset-render').addEventListener('click', () => {
@@ -265,7 +320,7 @@ $('show-border').addEventListener('change', () => {
 });
 
 $('show-axis').addEventListener('change', () => {
-  scene.setAxisVisible($('show-axis').checked);
+  stopAxisFlash();          // applies the checkbox state and clears any fade
   scene.render();
 });
 
@@ -312,6 +367,8 @@ $('render').addEventListener('click', async () => {
   if (!scene.model || rendering) return;
   rendering = true;
   cancelRequested = false;
+  stopAxisFlash();          // a fade must not carry into the capture
+
   discardStore();
   $('render').disabled = true;
   $('cancel').disabled = false;

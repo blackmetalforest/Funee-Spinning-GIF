@@ -146,6 +146,25 @@ export class SpinScene {
   }
 
   /**
+   * Fade the guide. Used for the brief flash when a Position control moves.
+   *
+   * `transparent` is switched on only while it is actually needed: a fully
+   * opaque material takes the cheaper opaque render pass, so at opacity 1 this
+   * leaves the checkbox-pinned guide rendering exactly as it did before. The
+   * flag is part of the material's program state, hence needsUpdate — but only
+   * on the two frames where it changes, never per frame of the fade.
+   */
+  setAxisOpacity(opacity) {
+    const material = this.axisShaft.material;   // shared with the head
+    const blended = opacity < 1;
+    if (material.transparent !== blended) {
+      material.transparent = blended;
+      material.needsUpdate = true;
+    }
+    material.opacity = opacity;
+  }
+
+  /**
    * Size the arrow so it brackets the model: tip clear of the top, base just
    * below the bottom.
    *
