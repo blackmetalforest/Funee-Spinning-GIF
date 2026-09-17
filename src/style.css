@@ -70,6 +70,12 @@ html, body {
 #canvas {
   max-width: 100%;
   max-height: 100%;
+  /* Required for the max-* rules above to bite. As a grid item the canvas gets
+     min-height/min-width: auto, i.e. its automatic minimum size — the full
+     render resolution — which outranks max-height and lets it overflow a stage
+     shorter than the render. Zeroing both lets it actually scale down. */
+  min-width: 0;
+  min-height: 0;
   object-fit: contain;
   display: block;
   /* Drag must orbit the model, not scroll the page behind it. */
@@ -274,4 +280,30 @@ footer { padding: 0 4px 8px; }
 
   .row { grid-template-columns: 96px 1fr auto; }
   .row output { min-width: 56px; }
+}
+
+/* ------------------------------------------- portrait phones: square stage
+ * A fixed 45vh strip is much wider than it is tall on a phone held upright,
+ * so a square render had its top and bottom cropped. Here the stage takes its
+ * size from its *width* and is locked square, which is the shape the render
+ * almost always is — so it fits exactly, with no letterboxing either.
+ *
+ * Capped at 55vh so a short phone still shows the top of the settings list
+ * and it is obvious the page scrolls. Past that cap the stage stops being
+ * square and the canvas falls back to fitting inside it, which the min-height
+ * rule above now allows.
+ */
+@media (max-width: 860px) and (orientation: portrait),
+       (pointer: coarse) and (orientation: portrait) {
+  /* Let the row take its height from the square stage instead of forcing 45vh. */
+  #app { grid-template-rows: auto 1fr; }
+  #view { height: auto; }
+
+  #stage {
+    flex: none;               /* stop it stretching to fill the view */
+    width: min(100%, 55vh);
+    max-height: 55vh;
+    aspect-ratio: 1 / 1;
+    align-self: center;       /* column flex: cross axis is horizontal */
+  }
 }

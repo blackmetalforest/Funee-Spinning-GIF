@@ -133,6 +133,17 @@ rest. On phones and tablets (`max-width: 860px` or `pointer: coarse`) it flips:
 the render view sits on top and stays put while the settings scroll underneath,
 so adjusting a slider always shows its effect.
 
+**In portrait the preview area is square**, sized from its own width rather than
+being a fixed slice of screen height. A phone held upright gives a view area far
+wider than it is tall, which cropped the top and bottom off a square render — and
+renders are square by default. It is capped at 55vh so the settings list is still
+visible below it on short screens.
+
+The canvas itself also carries `min-width: 0; min-height: 0`. As a grid item it
+otherwise takes an automatic minimum size equal to the full render resolution,
+which outranks `max-height: 100%` and lets it overflow any stage shorter than the
+render — the same crop, seen on landscape phones and small desktop windows.
+
 Two touch conflicts are handled explicitly. The canvas uses
 `touch-action: none` so dragging orbits the model instead of scrolling the page.
 The sliders use `touch-action: pan-y` so a vertical swipe scrolls even when it
