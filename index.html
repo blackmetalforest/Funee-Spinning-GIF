@@ -37,13 +37,13 @@
                title="Marks the rotation axis with a red arrow so you can see whether the model sits on it. Preview only — it is always off while frames are rendered."> Center axis</label>
         <label><input type="checkbox" id="show-border"
                title="Outlines the exact edge of the exported image so you can see what will be cropped. Preview only — it never appears in the output."> Image border</label>
+        <span class="preview-pair">
+          <label><input type="checkbox" id="preview"
+                 title="Spins the model live at the output's real frame rate, including GIF's 10 ms timing grid. Preview only — it never affects the export."> Preview</label>
+          <output id="preview-fps"></output>
+        </span>
       </div>
-      <div class="view-status">
-        <label><input type="checkbox" id="preview"
-               title="Spins the model live at the output's real frame rate, including GIF's 10 ms timing grid. Preview only — it never affects the export."> Preview</label>
-        <output id="preview-fps"></output>
-        <span id="view-size" class="muted"></span>
-      </div>
+      <span id="view-size" class="muted"></span>
     </div>
   </section>
 

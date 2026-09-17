@@ -156,7 +156,10 @@ html, body {
   gap: 12px 18px;
   flex-wrap: wrap;
 }
-.view-toggles, .view-status { display: flex; align-items: center; gap: 16px; }
+.view-toggles { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+/* The rate belongs to the Preview box, so it sits tight against it rather than
+   a full gap away. */
+.preview-pair { display: flex; align-items: center; gap: 6px; }
 #view-foot label {
   display: flex;
   align-items: center;
@@ -167,11 +170,12 @@ html, body {
 }
 #view-foot input[type="checkbox"] { width: 16px; height: 16px; margin: 0; }
 #preview-fps {
-  min-width: 58px;
-  text-align: right;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+/* Reserve nothing while the preview is off: an empty box would otherwise hold
+   a gap open in a row that is already tight on a phone. */
+#preview-fps:empty { display: none; }
 
 /* --------------------------------------------------------------- panel */
 
@@ -331,6 +335,17 @@ footer { padding: 0 4px 8px; }
 
   .row { grid-template-columns: 96px 1fr auto; }
   .row output { min-width: 56px; }
+
+  /* Fit the view's toggles on one line on a phone. */
+  #view-foot { font-size: 13px; gap: 6px 10px; }
+  .view-toggles { gap: 10px; }
+  #view-foot input[type="checkbox"] { width: 15px; height: 15px; }
+
+  /* Three toggles, a frame rate and a resolution will not fit across a phone.
+     While the preview is running the rate takes the resolution's slot: the
+     resolution is also the Image section's Width and Height, whereas the rate
+     actually achieved is shown nowhere else. */
+  #view-foot:has(#preview-fps:not(:empty)) #view-size { display: none; }
 }
 
 /* ------------------------------------------- portrait phones: square stage
