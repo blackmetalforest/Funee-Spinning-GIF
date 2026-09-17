@@ -86,6 +86,40 @@ Note that **Yaw and Start rotation look identical while the model is centred** �
 both turn it about Y. They diverge once X/Z is non-zero: yaw turns the model in
 place, Start rotation carries it around the pivot.
 
+## Preview
+
+A **Preview** checkbox at the bottom of the Spin section (off by default) spins
+the model live while every other control stays adjustable.
+
+It replays the encoder's own delay table rather than spinning smoothly, so what
+you see is the cadence the file will have — including the judder GIF's 10 ms
+grid introduces. At 0.25 rounds/s across 48 frames the ideal 83.33 ms per frame
+is stored as an alternating 80/90 ms, and the preview shows that. It uses the
+GIF grid because it is the coarsest, and it is already the one the loop summary
+quotes.
+
+The frame rate cannot be *set* — a browser paints at the display's refresh rate,
+normally 60 Hz — so playback is driven from that delay table against
+`performance.now()`. Two consequences:
+
+- **Above ~60 fps not every frame can be shown.** Frames are dropped rather than
+  the spin slowing down, so rotation speed and loop length stay correct and only
+  smoothness suffers. The rate beside the checkbox is what was actually
+  achieved, not what was asked for. (Past 50 fps a GIF will not play at the
+  requested rate in most viewers either — hence the red warning on the loop
+  summary — so a preview bounded by the display is closer to the truth.)
+- **Frame changes land on a vsync boundary**, up to ~16.7 ms from the exact
+  delay. That is inherent to animation in a browser and applies to real GIF
+  playback too.
+
+Playback is a lookup against the clock, not a frame counter, which is what keeps
+it honest when it cannot keep up: a backgrounded tab (where the browser stops
+animation callbacks outright), a target above the refresh rate, or one slow
+frame all resolve to the pose belonging to the current time instead of falling
+behind by whatever was missed. A single rendering loop serves both the spin and
+the centre-axis fade, and draws only when something actually changed — at 1 fps
+that is one draw per second, and a 1-frame still draws once and then stops.
+
 ## Output formats
 
 | Format | Colour | Transparency | Timing | Notes |

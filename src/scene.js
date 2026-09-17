@@ -17,6 +17,10 @@ import * as THREE from '../vendor/three/three.module.js';
 
 export const UP_AXES = ['Y', 'Z', 'X'];
 
+// Hoisted: setAngle() runs once per frame of the live preview, and allocating a
+// vector per call is pure garbage for the collector to chase.
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
+
 export const DEFAULT_SETTINGS = {
   width: 480,
   height: 480,
@@ -426,7 +430,7 @@ export class SpinScene {
     this.pivot.rotation.set(0, 0, 0);
     if (s.upAxis === 'Z') this.pivot.rotateX(-Math.PI / 2);
     else if (s.upAxis === 'X') this.pivot.rotateZ(Math.PI / 2);
-    this.pivot.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), total);
+    this.pivot.rotateOnWorldAxis(WORLD_UP, total);
   }
 
   render() {

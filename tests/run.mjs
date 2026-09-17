@@ -11,7 +11,8 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
-import { frameDelaysMs, loopSummary, frameAngles, roundHalfToEven } from '../src/encoders/timing.js';
+import { frameDelaysMs, loopSummary, frameAngles, roundHalfToEven,
+         frameStarts, frameIndexAt } from '../src/encoders/timing.js';
 import { muxAnimation } from '../src/encoders/webp.js';
 import { muxApng } from '../src/encoders/apng.js';
 import { encodePng } from '../src/encoders/png.js';
@@ -53,6 +54,36 @@ check('starts at 0', angles[0] === 0);
 check('no repeated pose at the wrap', Math.abs(angles[23]) !== 360);
 check('even 15 deg steps', Math.abs(Math.abs(angles[1] - angles[0]) - 15) < 1e-9);
 check('counter-clockwise flips sign', frameAngles(4, false)[1] > 0);
+
+console.log('\nplayback lookup');
+// The live preview asks which frame belongs to a clock reading rather than
+// counting frames, so it stays correct when it cannot keep up.
+{
+  const delays = frameDelaysMs(48, 0.25, 'gif');
+  const { starts, totalMs } = frameStarts(delays);
+  check('starts begin at 0', starts[0] === 0);
+  check('starts are cumulative', starts[1] === delays[0] && starts[2] === delays[0] + delays[1]);
+  check('total matches the summary', totalMs === loopSummary(48, 0.25, 'gif').totalMs);
+
+  check('t=0 is frame 0', frameIndexAt(starts, totalMs, 0) === 0);
+  check('just before a boundary stays put', frameIndexAt(starts, totalMs, starts[1] - 1) === 0);
+  check('the boundary itself advances', frameIndexAt(starts, totalMs, starts[1]) === 1);
+  check('a late frame resolves', frameIndexAt(starts, totalMs, starts[30] + 1) === 30);
+
+  // Wrapping is what lets a backgrounded tab resume at the right phase
+  // instead of fast-forwarding through every frame it missed.
+  check('one full loop wraps to 0', frameIndexAt(starts, totalMs, totalMs) === 0);
+  check('many loops later keeps phase',
+    frameIndexAt(starts, totalMs, totalMs * 37 + starts[9]) === 9);
+  check('negative elapsed is handled', frameIndexAt(starts, totalMs, -1) === 47);
+
+  // A single frame is a still: every clock reading is frame 0.
+  const one = frameStarts(frameDelaysMs(1, 1, 'gif'));
+  check('a 1-frame loop is always frame 0',
+    frameIndexAt(one.starts, one.totalMs, 0) === 0 &&
+    frameIndexAt(one.starts, one.totalMs, 999999) === 0);
+  check('empty delays do not throw', frameIndexAt([], 0, 5) === 0);
+}
 
 console.log('\npng encoder');
 // A tiny 2x2 image, then confirm the signature and chunk order.

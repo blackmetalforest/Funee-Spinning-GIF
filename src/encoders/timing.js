@@ -62,6 +62,45 @@ export function loopSummary(nFrames, rps, fmt = 'gif') {
   };
 }
 
+/**
+ * Cumulative start offset of each frame, plus the total. Feeds frameIndexAt().
+ */
+export function frameStarts(delays) {
+  const starts = new Array(delays.length);
+  let elapsed = 0;
+  for (let i = 0; i < delays.length; i++) {
+    starts[i] = elapsed;
+    elapsed += delays[i];
+  }
+  return { starts, totalMs: elapsed };
+}
+
+/**
+ * Which frame is on screen `t` ms into the loop.
+ *
+ * The live preview asks this once per animation frame rather than counting
+ * frames as they pass, which is what keeps it honest when it cannot keep up: a
+ * backgrounded tab (requestAnimationFrame stops entirely), a target rate above
+ * the display's refresh, or a single frame overrunning its budget all land on
+ * the pose that belongs to the current clock instead of drifting behind by
+ * however much was missed. `t` is wrapped, so any elapsed time is valid.
+ */
+export function frameIndexAt(starts, totalMs, t) {
+  if (!starts.length) return 0;
+  if (!(totalMs > 0)) return 0;
+  let time = t % totalMs;
+  if (time < 0) time += totalMs;                 // negative elapsed, just in case
+  // Binary search for the last frame starting at or before `time`.
+  let lo = 0;
+  let hi = starts.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (starts[mid] <= time) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo;
+}
+
 /** Angles for exactly one seamless revolution (the last frame is not 360). */
 export function frameAngles(nFrames, clockwise = true, start = 0) {
   const n = Math.max(1, Math.floor(nFrames));

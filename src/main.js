@@ -10,7 +10,8 @@
 import { SpinScene, DEFAULT_SETTINGS } from './scene.js';
 import { loadModel, FILE_ACCEPT, extensionOf, SELF_CONTAINED } from './loaders.js';
 import { captureFrames, decodeFrames, storeSize } from './capture.js';
-import { loopSummary, FPS_LIMIT } from './encoders/timing.js';
+import { loopSummary, FPS_LIMIT, frameAngles, frameDelaysMs,
+         frameStarts, frameIndexAt } from './encoders/timing.js';
 import { encodeGif } from './encoders/gif.js';
 import { muxAnimation, encodeStill } from './encoders/webp.js';
 import { muxApng } from './encoders/apng.js';
@@ -65,6 +66,17 @@ function readSettings() {
   };
 }
 
+/*
+ * Frame count is derived, not chosen: frames = frame rate x seconds per turn.
+ * Spin speed and frame rate are what anyone actually has an opinion about; the
+ * frame count is the bill that arrives for them.
+ *
+ * Neither GIF nor animated WebP caps the number of frames in the format — GIF
+ * does not store a count at all, and WebP's limit is the 4 GiB RIFF container.
+ * What actually bites here is this app: every frame is held in memory as a PNG
+ * and re-encoded on save, so the thresholds below are about render time, memory
+ * and a file anyone would tolerate, not about a format rule.
+ */
 function readSpin() {
   return {
     frames: clampInt($('frames').value, 1, 240, 48),
@@ -137,25 +149,169 @@ function setSaveEnabled(enabled) {
 /* -------------------------------------------------------------- render */
 
 let previewHandle = 0;
+/* --------------------------------------------------------- preview pump */
+
 /*
- * The centre-axis guide flashes up whenever a Position control moves, so the
- * reference is on screen exactly while it is being used and then gets out of
- * the way. Full strength for FLASH_HOLD_MS, then faded over FLASH_FADE_MS.
+ * One requestAnimationFrame loop drives everything live on the canvas: the spin
+ * preview and the centre-axis flash. Two loops would mean two draws in the same
+ * frame, and a fade updating at 60 fps while the spin updates at 12.
  *
- * Opacity is derived from the clock rather than stepped per frame: rAF stops
- * in a backgrounded tab, and a per-frame step would resume mid-fade and
- * stretch it. During the hold the opacity does not change, so no redraw is
- * issued either — the loop only renders on the frames that actually differ.
+ * Each tick asks both contributors what they want at the current clock reading
+ * and draws once if either changed, so nothing is drawn when nothing moves — at
+ * 1 fps that is one draw per second rather than sixty.
+ */
+/*
+ * A flag rather than a stored frame id: nothing here is ever cancelled, so the
+ * loop only needs to know whether a tick is already queued. It stops on its own
+ * once neither contributor wants another one.
+ */
+let pumping = false;
+
+function pump() {
+  pumping = false;                       // this tick is running; another may be queued
+  const now = performance.now();
+  const stepped = advancePlayback(now);
+  const faded = advanceFlash(now);
+  if (stepped || faded) scene.render();
+  if (stepped) measureRate(now);
+  updateRateReadout(now);
+  if (playing || flashEndsAt) startPump();
+}
+
+function startPump() {
+  if (pumping) return;
+  pumping = true;
+  requestAnimationFrame(pump);
+}
+
+/* ---------------------------------------------------------- spin preview */
+
+/*
+ * Playback is a lookup against the clock, not a frame counter. That is what
+ * keeps it honest when it cannot keep up: a backgrounded tab (rAF stops
+ * outright), a target rate above the display's refresh, or one slow frame all
+ * resolve to the pose belonging to the current time instead of falling behind
+ * by whatever was missed. Speed and loop length stay right; only smoothness
+ * gives.
+ */
+let playing = false;
+let playEpoch = 0;
+let shownIndex = -1;
+const cycle = { angles: [], starts: [], totalMs: 0 };
+
+function rebuildCycle() {
+  const spin = readSpin();
+  cycle.angles = frameAngles(spin.frames, spin.clockwise);
+  // GIF's grid, the same one #loop-info quotes: the coarsest of the formats,
+  // and the only one whose quantisation is visible as judder.
+  const { starts, totalMs } = frameStarts(frameDelaysMs(spin.frames, spin.rps, 'gif'));
+  cycle.starts = starts;
+  cycle.totalMs = totalMs;
+  shownIndex = -1;                       // force the next tick to draw
+}
+
+/*
+ * Rebuild after a settings change, holding the model where it is. Restarting
+ * the loop instead would yank it back to frame 0 on every step of a Spin speed
+ * drag, which is exactly when the preview is most useful.
+ */
+function resyncCycle() {
+  const previous = cycle.totalMs;
+  const phase = playing && previous > 0
+    ? ((performance.now() - playEpoch) % previous) / previous
+    : 0;
+  rebuildCycle();
+  if (playing) playEpoch = performance.now() - phase * cycle.totalMs;
+}
+
+function playbackIndexAt(now) {
+  return frameIndexAt(cycle.starts, cycle.totalMs, now - playEpoch);
+}
+
+function advancePlayback(now) {
+  if (!playing) return false;
+  const index = playbackIndexAt(now);
+  if (index === shownIndex) return false;
+  shownIndex = index;
+  scene.setAngle(cycle.angles[index]);
+  return true;
+}
+
+function startPlayback() {
+  if (playing || rendering || !scene.model) return;
+  rebuildCycle();
+  playEpoch = performance.now();
+  stepEma = 0;
+  lastStepAt = 0;
+  playing = true;
+  startPump();
+}
+
+function stopPlayback({ rewind = true } = {}) {
+  if (!playing) return;
+  playing = false;
+  shownIndex = -1;
+  $('preview-fps').textContent = '';
+  // Frame 0 is what every other still preview shows, and what the next
+  // settings change would snap to anyway.
+  if (rewind && scene.model) { scene.setAngle(0); scene.render(); }
+}
+
+/*
+ * The achieved rate, measured from the gaps between frames actually shown — so
+ * a 100 fps target on a 60 Hz display reads about 60 rather than claiming 100.
+ * Smoothed, because individual gaps jitter by up to a vsync interval.
+ */
+let stepEma = 0;
+let lastStepAt = 0;
+let rateShownAt = 0;
+
+function measureRate(now) {
+  if (lastStepAt) {
+    const gap = now - lastStepAt;
+    stepEma = stepEma ? stepEma * 0.8 + gap * 0.2 : gap;
+  }
+  lastStepAt = now;
+}
+
+function updateRateReadout(now) {
+  if (!playing) return;
+  if (cycle.angles.length === 1) { $('preview-fps').textContent = 'still'; return; }
+  if (!stepEma || now - rateShownAt < 250) return;
+  rateShownAt = now;
+  $('preview-fps').textContent = `${(1000 / stepEma).toFixed(1)} fps`;
+}
+
+/* ------------------------------------------------------ centre-axis flash */
+
+/*
+ * The guide flashes up whenever a Position control moves, so the reference is
+ * on screen exactly while it is being used and then gets out of the way. Full
+ * strength for FLASH_HOLD_MS, then faded over FLASH_FADE_MS.
+ *
+ * Opacity is derived from the clock for the same reason the spin is: a stepped
+ * fade would resume mid-way after a backgrounded tab and stretch itself out.
  */
 const FLASH_HOLD_MS = 2000;
 const FLASH_FADE_MS = 2000;
 let flashEndsAt = 0;
-let flashHandle = 0;
 let flashOpacity = -1;
 
+function advanceFlash(now) {
+  if (!flashEndsAt) return false;
+  const remaining = flashEndsAt - now;
+  if (remaining <= 0) {
+    stopAxisFlash();
+    return true;                         // the guide just went away; redraw
+  }
+  const opacity = Math.min(1, remaining / FLASH_FADE_MS);
+  if (opacity === flashOpacity) return false;
+  scene.setAxisOpacity(opacity);
+  flashOpacity = opacity;
+  return true;
+}
+
 function stopAxisFlash() {
-  cancelAnimationFrame(flashHandle);
-  flashHandle = 0;
   flashEndsAt = 0;
   flashOpacity = -1;
   scene.setAxisOpacity(1);
@@ -167,28 +323,10 @@ function flashAxis() {
   // also stays away entirely while frames are being captured, so a fade can
   // never bleed into an export.
   if ($('show-axis').checked || rendering || !scene.model) return;
-
   flashEndsAt = performance.now() + FLASH_HOLD_MS + FLASH_FADE_MS;
+  flashOpacity = -1;                     // force the first frame to draw
   scene.setAxisVisible(true);
-  if (flashHandle) return;                  // already running; it reads the new deadline
-
-  const step = () => {
-    const remaining = flashEndsAt - performance.now();
-    if (remaining <= 0) {
-      stopAxisFlash();
-      scene.render();
-      return;
-    }
-    const opacity = Math.min(1, remaining / FLASH_FADE_MS);
-    if (opacity !== flashOpacity) {
-      scene.setAxisOpacity(opacity);
-      flashOpacity = opacity;
-      scene.render();
-    }
-    flashHandle = requestAnimationFrame(step);
-  };
-  flashOpacity = -1;                        // force the first frame to draw
-  flashHandle = requestAnimationFrame(step);
+  startPump();
 }
 
 function schedulePreview() {
@@ -196,7 +334,17 @@ function schedulePreview() {
   previewHandle = requestAnimationFrame(() => {
     if (!scene.model) return;
     scene.applySettings(readSettings());
-    scene.setAngle(0);
+    // applySettings() rebuilds the pivot rotation from scratch, so the spin
+    // angle has to be re-applied here. Take it from the clock rather than from
+    // the last frame drawn: a settings change also rebuilds the cycle, which
+    // invalidates that index, and reusing it drops the model back to frame 0
+    // on every change — most of a slider drag, at low frame rates.
+    if (playing) {
+      shownIndex = playbackIndexAt(performance.now());
+      scene.setAngle(cycle.angles[shownIndex]);
+    } else {
+      scene.setAngle(0);
+    }
     scene.render();
   });
 }
@@ -205,6 +353,7 @@ function applyAndPreview() {
   syncOutputs();
   updateLoopInfo();
   updateViewSize();
+  if (playing) resyncCycle();   // frames/speed/direction may have moved
   schedulePreview();
 }
 
@@ -238,6 +387,7 @@ async function handleFile(file) {
     $('render').disabled = false;
     discardStore();
     schedulePreview();
+    if ($('preview').checked) startPlayback();   // requested before a model existed
   } catch (err) {
     console.error(err);
     $('model-info').innerHTML = `<span class="warn">${err.message}</span>`;
@@ -319,6 +469,11 @@ $('show-border').addEventListener('change', () => {
   canvas.classList.toggle('show-border', $('show-border').checked);
 });
 
+$('preview').addEventListener('change', () => {
+  if ($('preview').checked) startPlayback();
+  else stopPlayback();
+});
+
 $('show-axis').addEventListener('change', () => {
   stopAxisFlash();          // applies the checkbox state and clears any fade
   scene.render();
@@ -368,6 +523,7 @@ $('render').addEventListener('click', async () => {
   rendering = true;
   cancelRequested = false;
   stopAxisFlash();          // a fade must not carry into the capture
+  stopPlayback({ rewind: false });
 
   discardStore();
   $('render').disabled = true;
@@ -404,6 +560,7 @@ $('render').addEventListener('click', async () => {
     $('cancel').disabled = true;
     scene.setAngle(0);
     scene.render();
+    if ($('preview').checked) startPlayback();
   }
 });
 
