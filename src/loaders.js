@@ -33,6 +33,7 @@ import { toCreasedNormals } from '../vendor/three/addons/utils/BufferGeometryUti
 import {
   openArchive, baseName, dirName, extOf, stemOf, normKey, channelOf, nameAffinity,
 } from './archive.js';
+import { sanitiseMtl } from './mtl-fix.js';
 
 export const SUPPORTED_EXTENSIONS = [
   'glb', 'gltf', 'obj', 'stl', 'ply', 'dae', '3mf', 'fbx', 'usdz', 'vox', '3ds',
@@ -305,7 +306,8 @@ function parseMtl(index, mtlPath, manager) {
   const loader = new MTLLoader(manager);
   // Maps inside the .mtl are relative to the .mtl, not to the .obj.
   const materials = loader.parse(
-    new TextDecoder().decode(index.bytes(mtlPath)), dirName(mtlPath) + '/');
+    sanitiseMtl(new TextDecoder().decode(index.bytes(mtlPath))),
+    dirName(mtlPath) + '/');
   materials.preload();
   return materials;
 }
@@ -766,7 +768,31 @@ function repairMaterials(object) {
         material.needsUpdate = true;
       }
     }
+    // Invisible materials, whatever the format they came from.
+    for (const material of materialsOf(child)) if (material) unhide(material);
   });
+}
+
+/**
+ * Bring back a material that would draw nothing at all.
+ *
+ * Nobody loads a model in order to look at nothing, so a material left fully
+ * transparent is a defect in the file rather than an intention. Ripped models
+ * are full of them — the .mtl case has its own precise fix in sanitiseMtl(),
+ * but FBX and Collada arrive with the same damage and no comparable tell, so
+ * this catches whatever gets through.
+ *
+ * The threshold is deliberately at the floor: real glass is authored somewhere
+ * between 0.1 and 0.9 and keeps working untouched. Only materials that are
+ * literally invisible are changed.
+ */
+const INVISIBLE = 0.02;
+
+function unhide(material) {
+  if (material.opacity > INVISIBLE) return;
+  material.opacity = 1;
+  material.transparent = false;
+  material.needsUpdate = true;
 }
 
 /** Summary line for the UI, mirroring the desktop app's model info row. */

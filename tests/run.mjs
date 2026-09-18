@@ -18,6 +18,7 @@ import { muxApng } from '../src/encoders/apng.js';
 import { encodePng } from '../src/encoders/png.js';
 import { openArchive, AssetIndex, rankModels, cleanPath, normKey, extOf, stemOf,
          baseName, dirName, channelOf, nameAffinity } from '../src/archive.js';
+import { sanitiseMtl } from '../src/mtl-fix.js';
 import { zipSync, strToU8 } from '../vendor/fflate.module.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -275,6 +276,28 @@ check('a percent-encoded name still resolves',
 // Packagers re-encode .tga as .png without rewriting the reference.
 check('a changed extension still resolves',
   hashed.find('#CAM0001_COL_4k.tga') === 'textures/#CAM0001_COL_4k.png');
+
+console.log('\nmtl dissolve/transparency');
+// The 3ds Max exporter behind most ripped models writes both, with Tr
+// carrying d's meaning. Taken literally the material is invisible, which is
+// what "the mesh loads but I cannot find it" actually was.
+const contradictory = 'newmtl a\nd 1.0000\nTr 1.0000\nmap_Kd a.png\n';
+check('a contradictory Tr is dropped', !/Tr/.test(sanitiseMtl(contradictory)));
+check('the d line survives', /^d 1\.0000$/m.test(sanitiseMtl(contradictory)));
+check('everything else survives', /map_Kd a\.png/.test(sanitiseMtl(contradictory)));
+// A file that means it is left alone, which is why this cannot just be
+// MTLLoader's invertTrProperty: that would turn Tr 0 into an invisible material.
+check('a consistent Tr 0 is kept', /Tr 0/.test(sanitiseMtl('newmtl a\nd 1\nTr 0\n')));
+check('a consistent half-transparent pair is kept',
+  /Tr 0\.5/.test(sanitiseMtl('newmtl a\nd 0.5\nTr 0.5\n')));
+check('Tr alone is never touched', /Tr 1/.test(sanitiseMtl('newmtl a\nTr 1\n')));
+check('d alone is never touched', sanitiseMtl('newmtl a\nd 1\n') === 'newmtl a\nd 1\n');
+// Each block is judged on its own.
+const mixed = sanitiseMtl('newmtl a\nd 1\nTr 1\nnewmtl b\nd 1\nTr 0\n');
+check('only the contradicting block loses its Tr',
+  (mixed.match(/Tr/g) || []).length === 1 && /Tr 0/.test(mixed), JSON.stringify(mixed));
+check('keywords that merely start with d are safe',
+  /disp bump\.png/.test(sanitiseMtl('newmtl a\nd 1\nTr 1\ndisp bump.png\n')));
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

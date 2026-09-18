@@ -191,6 +191,24 @@ array to its first entry paints every group with the first texture: the whole
 model wearing one patch of its atlas. Keeping the array is the single change
 that fixed the most models here.
 
+**Contradictory transparency.** `d` is dissolve, where 1 is opaque; `Tr` is
+transparency, where 1 is invisible. The 3ds Max Wavefront exporter behind most
+ripped models writes *both*, with `Tr` carrying the same meaning as `d`:
+
+```
+d  1.0000
+Tr 1.0000
+```
+
+Read to the letter that says "completely opaque, and also completely invisible",
+and `Tr` comes second, so it wins. That is why a model could load, report its
+meshes, and then be nowhere to be found in the scene. A `Tr` that *contradicts*
+the `d` beside it is dropped; a consistent pair is left alone, which is why this
+is not simply MTLLoader's `invertTrProperty` — that would turn every correct
+`Tr 0` into an invisible material instead. Materials left fully transparent by
+any other route are made opaque too, since nobody loads a model to look at
+nothing.
+
 **Crushed tints.** The scene multiplies a material's colour by its texture, so a
 base colour of near-black hides the texture completely. FBX exporters write
 exactly that. Only tints dark enough to crush any texture to black are touched,
