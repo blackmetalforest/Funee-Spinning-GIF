@@ -262,30 +262,44 @@ export class SpinScene {
    * Override materials with MeshPhongMaterial so the desktop app's lighting
    * controls keep their meaning (Phong *is* Blinn-Phong), and inject the rim
    * term three.js has no equivalent for.
+   *
+   * A mesh may carry an *array* of materials, one per geometry group, and that
+   * has to survive: OBJLoader builds exactly that shape whenever a file uses
+   * more than one `usemtl`, which is most of the time for a ripped game model.
+   * Collapsing the array to its first entry paints every group with the first
+   * texture — the whole model wearing one patch of its atlas, which is what
+   * "the textures are in the wrong spot" looks like.
    */
   applyMaterials() {
     if (!this.model) return;
     this.rimUniforms = [];
     this.model.traverse((child) => {
       if (!child.isMesh) return;
-      const source = Array.isArray(child.material) ? child.material[0] : child.material;
-      const phong = new THREE.MeshPhongMaterial({
-        color: source?.color?.clone?.() ?? new THREE.Color(0xffffff),
-        map: source?.map ?? null,
-        vertexColors: !!child.geometry?.attributes?.color,
-        transparent: !!source?.transparent,
-        opacity: source?.opacity ?? 1,
-        alphaTest: source?.alphaTest ?? 0,
-        side: THREE.FrontSide,
-        shininess: this.settings.shininess,
-        specular: new THREE.Color().setScalar(this.settings.specular),
-      });
+      const sources = materialsOf(child);
+      const converted = sources.map((source) => this.toPhong(source, child));
+      child.material = Array.isArray(child.material) ? converted : converted[0];
       if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
-      this.attachRim(phong);
-      child.material = phong;
       child.castShadow = false;
       child.receiveShadow = false;
     });
+  }
+
+  /** One source material, restated as the Phong the lighting controls drive. */
+  toPhong(source, mesh) {
+    const phong = new THREE.MeshPhongMaterial({
+      name: source?.name ?? '',
+      color: source?.color?.clone?.() ?? new THREE.Color(0xffffff),
+      map: source?.map ?? null,
+      vertexColors: !!mesh.geometry?.attributes?.color,
+      transparent: !!source?.transparent,
+      opacity: source?.opacity ?? 1,
+      alphaTest: source?.alphaTest ?? 0,
+      side: THREE.FrontSide,
+      shininess: this.settings.shininess,
+      specular: new THREE.Color().setScalar(this.settings.specular),
+    });
+    this.attachRim(phong);
+    return phong;
   }
 
   /**
@@ -327,16 +341,19 @@ export class SpinScene {
     if (this.model) {
       this.model.traverse((child) => {
         if (!child.isMesh || !child.material) return;
-        child.material.shininess = s.shininess;
-        child.material.specular.setScalar(s.specular);
-        child.material.side = THREE.DoubleSide;
-        if (!s.shadeTexture && child.material.map) {
-          child.material.userData.savedMap = child.material.map;
-          child.material.map = null;
-          child.material.needsUpdate = true;
-        } else if (s.shadeTexture && !child.material.map && child.material.userData.savedMap) {
-          child.material.map = child.material.userData.savedMap;
-          child.material.needsUpdate = true;
+        for (const material of materialsOf(child)) {
+          if (!material) continue;
+          material.shininess = s.shininess;
+          material.specular.setScalar(s.specular);
+          material.side = THREE.DoubleSide;
+          if (!s.shadeTexture && material.map) {
+            material.userData.savedMap = material.map;
+            material.map = null;
+            material.needsUpdate = true;
+          } else if (s.shadeTexture && !material.map && material.userData.savedMap) {
+            material.map = material.userData.savedMap;
+            material.needsUpdate = true;
+          }
         }
       });
     }
@@ -464,6 +481,11 @@ function maxRadiusFromPoint(root, centre) {
     }
   });
   return Math.sqrt(maxSq);
+}
+
+/** Every material on a mesh, whether it holds one or an array of them. */
+function materialsOf(mesh) {
+  return Array.isArray(mesh.material) ? mesh.material : [mesh.material];
 }
 
 function disposeTree(root) {
