@@ -1,6 +1,9 @@
 # Test artifacts (fixtures under tests/fixtures/ ARE tracked)
 tests/out/
 
+# Local collection of sample models — hundreds of MB, and not ours to publish
+Test3D/
+
 # Editor / OS noise
 .DS_Store
 *.swp

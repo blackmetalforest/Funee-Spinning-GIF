@@ -11,6 +11,8 @@ no build step and no backend — it's a static site.
 ## What it does
 
 - Loads 11 model formats, including textured GLB and FBX
+- Opens **.zip bundles** — finds the model inside, textures and all, even
+  when it is buried in a second archive
 - Renders on the GPU with three.js
 - Produces a **seamless loop** — frame *i* sits at exactly `i × 360/N` degrees,
   so the last frame steps into the first with no repeated pose
@@ -32,15 +34,178 @@ load over `file://`.
 ## Supported input
 
 `.glb` `.gltf` `.fbx` `.obj` `.stl` `.ply` `.dae` `.3mf` `.usdz` `.vox` `.3ds`
-— plus Draco- and Meshopt-compressed glTF.
+— plus Draco- and Meshopt-compressed glTF, and **`.zip`**.
 
-**Single-file formats work best.** GLB, FBX, USDZ, VOX and 3MF carry their
-textures inside the file. OBJ, DAE and 3DS usually reference textures as
-separate files, which a browser file picker can't follow, so they load
-untextured — converting to GLB fixes it. The app tells you when it spots this.
+A lone `.glb`, `.usdz`, `.fbx`, `.vox` or `.3mf` carries its textures inside the
+file and always works. A lone `.obj`, `.gltf`, `.dae` or `.3ds` keeps them in
+separate files a browser file picker cannot follow, so it loads untextured —
+**drop the zip instead** and they come with it.
 
 Not supported: `.off` (no three.js loader), VRML (needs a large extra parser),
-and KTX2/Basis textures.
+KTX2/Basis textures, and `.rar` or `.7z` archives — the app says so when it
+finds one rather than failing silently.
+
+## Zipped models
+
+Textured models are almost never one file. The usual shape, and the one every
+model-sharing site produces, is a bundle:
+
+```
+source/Model.fbx          ← sometimes itself a nested .zip
+textures/Model_BaseColor.png
+license.txt
+```
+
+Drop that zip in and [`src/archive.js`](src/archive.js) flattens it — archives
+inside archives included, up to four deep — picks the most promising model in
+it, and answers every texture the model asks for out of the archive instead of
+the network. Only files that could matter are decompressed, so a 59 MB camera
+bundle loads without ever inflating the 14 MB `.blend` sitting next to the
+model.
+
+**Which model.** Where a bundle holds several, the format carrying the most
+material information wins — glTF and FBX over OBJ, OBJ over STL — then the one
+nearest the top, then the biggest. Files that are obviously not the deliverable
+(`_LOD3`, `collision`, `backup`) go to the back. The info line names what was
+chosen and how many models it chose from.
+
+**Which texture.** Matching is tried strictest-first, and only gets loose once
+the strict forms fail:
+
+1. the exact path, relative to the model's own folder and then to the archive root
+2. the longest matching path *suffix*, compared segment by segment — this is what
+   tells a `Textures_4k/COL.png` apart from the `Textures_2k/COL.png` beside it
+3. the filename alone: exact, then ignoring separators, then ignoring the extension
+
+Step 3 is the one that earns its keep. Packagers rewrite names on the way into a
+zip: one bundle here has an FBX asking for `DesertEagle_Desert Eagle_BaseColor.png`
+while the zip actually contains `DesertEagle_Desert_Eagle_BaseColor.png`. Reducing
+both to their alphanumerics makes them the same string. The same step absorbs
+Windows authoring paths (`W:\3D Graphics\...\Textures\Foo.png`), `.tga` files
+re-encoded as `.png`, and the `#` that several bundles start their filenames with
+— which is why a fragment can never simply be stripped off a reference.
+
+**When the model names nothing at all.** Some bundles ship a model whose texture
+references are simply gone: an OBJ whose `.mtl` was left out of the zip, or a
+Collada file exported with no `<library_images>`, sitting next to a `textures/`
+folder that plainly belongs to it. Nothing in either file format connects the
+two. As a last resort the leftover images are matched to material names, and
+where that is what happened the info line says **"matched by name"** — because a
+guess should look different from a fact. It stays conservative: textures whose
+filenames mark them as normal, roughness, metalness, AO or opacity maps are
+never offered as colour, a mesh with no UVs is skipped, and a match needs either
+a clear name overlap or an archive that leaves exactly one possibility.
+
+**When the first model will not parse.** Ripped bundles routinely ship a Collada
+file no parser will touch beside an OBJ that loads perfectly. With no explicit
+choice, the ranked models are tried in order until one works, and the info line
+says what was skipped and why. Once you *have* chosen a model, only that one is
+tried — quietly loading a different one would make the choice a lie.
+
+**What still cannot work.** An OBJ whose `.mtl` is missing *and* whose material
+names share nothing with the texture filenames (`Material__25` against
+`Main_Defuse.jpg`) has no recoverable link, and loads untextured. A PLY cannot
+reference a texture at all. A `.rar` inside a zip cannot be opened — there is no
+small pure-JS unrar. Each of these is reported rather than passed off as success.
+
+## Advanced: mixing and matching
+
+Some bundles are genuinely ambiguous — ten models, five material files, a
+hundred loose textures — and no amount of ranking makes that decision for you.
+An **Advanced** disclosure at the foot of the 3D model section, under the info
+line, lets you pick the combination by hand.
+
+A row appears only where there is a real question:
+
+| | |
+| --- | --- |
+| **Model** | which model in the zip to load |
+| **Texture setup** | which material file positions the textures |
+| **Texture** | force one texture onto the whole model |
+
+Choosing a model re-derives the rest, which is what makes the two common cases
+automatic. A `.dae`, `.fbx` or `.glb` describes its own materials, so the
+Texture setup row collapses to "Built into *that file*" and disappears. An
+`.obj` keeps them in a sidecar, so the row lists every `.mtl` in the archive and
+pre-selects the one that matches — pick `Adeleine_High.obj` and you get
+`Adeleine_High.mtl`, pick `Adeleine_Low.obj` and you get `Adeleine_Low.mtl`.
+
+The **Texture** row is the blunt instrument, and sometimes the right one: a rip
+whose material data is wrong is often a single atlas the whole model was meant
+to share, and choosing that file by hand beats any amount of guessing.
+
+### Replacing textures
+
+While **Texture** is left on "From the material data", a numbered list of
+replacers appears:
+
+```
+── TEXTURE REPLACER #1
+   Replace   FaceSide1 — GoemonFace1.png   ▾
+   With      GoemonFace4.png               ▾
+── TEXTURE REPLACER #2
+   Replace   Nothing                       ▾
+   With      Nothing                       ▾
+```
+
+Both boxes start at *Nothing* and nothing happens until both are set. This is
+the swap-a-face case: retro character folders routinely ship several
+expressions side by side, and the material data picks one of them.
+
+**Filling a replacer opens another below it**, so there is no limit — Goemon's
+face is split across `FaceSide1` and `FaceSide2`, and changing his expression
+means changing both. A material already spoken for is dropped from every other
+replacer's list, so two of them can never fight over the same one. Setting a
+Replace box back to *Nothing* removes that replacer and renumbers the rest.
+
+Each entry in **Replace** is labelled with the material name *and the file it is
+currently showing* — `FaceSide1 — GoemonFace1.png`. The filename is the half
+that makes the list usable, because rip material names are cryptic
+(`_153f42ee_dds`).
+
+Every replacement **inherits the sampler settings of the texture it replaces** —
+`flipY`, wrap mode, repeat and offset. Wrap mode is the one that matters: these
+models lean on repeat and mirrored wrapping, and a replacement that quietly
+reset it would tile or clamp wrongly.
+
+Setting **Replace** on its own does not reload — it would throw away the box you
+just set before you could reach the second one. Only a *complete* pair changes
+what is on screen. Changing **Model** or **Texture setup** clears every
+replacer, since the materials they named may not exist in the new one.
+
+Labels come from mapping each loaded texture back to its archive entry through
+the blob URL it was served on, which works for OBJ/MTL, Collada, FBX and 3DS.
+glTF is the exception: it decodes to an `ImageBitmap`, which carries no URL, so
+those entries show the material name alone. Replacing still works there.
+
+## What gets repaired on the way in
+
+Ripped game models arrive with a small set of recurring defects. Each of these
+only ever touches a model that would otherwise render wrongly, so a file that is
+already correct passes through untouched.
+
+**Per-group materials.** A mesh can carry an *array* of materials, one per
+geometry group, and OBJLoader builds exactly that whenever a file uses more than
+one `usemtl` — which is most of the time for a ripped model. Collapsing that
+array to its first entry paints every group with the first texture: the whole
+model wearing one patch of its atlas. Keeping the array is the single change
+that fixed the most models here.
+
+**Crushed tints.** The scene multiplies a material's colour by its texture, so a
+base colour of near-black hides the texture completely. FBX exporters write
+exactly that. Only tints dark enough to crush any texture to black are touched,
+and only where there is a texture for them to crush.
+
+**Colour space.** A colour map holds sRGB data by definition, but ColladaLoader
+sets no colour space at all, which renders washed out.
+
+Two things are deliberately *not* repaired, because there is no honest rule for
+them. **Vertex colours** are ambiguous in these exports — sometimes they carry
+the model's actual colour, sometimes baked shading that double-darkens the
+texture it multiplies — so they are applied as the file asks and noted in the
+info line. And where a bundle ships several exports of the same model, only an
+obvious derived variant (`_bake`, `_LOD3`, `collision`) is pushed down the
+ranking; choosing between the rest is what the Advanced panel is for.
 
 ## Position
 
@@ -216,7 +381,9 @@ node tests/run.mjs
 ```
 
 Covers the logic that needs no DOM: delay rounding (including the half-to-even
-edge case), loop angles, the PNG encoder and both muxers.
+edge case), loop angles, the PNG encoder, both muxers, and the archive hunter —
+path handling, texture-name classification, model ranking, the lookup chain and
+the .mtl transparency repair, against zips built in memory.
 
 `tests/collect_server.py` is a static server that also accepts POSTs, so an
 automated browser run can hand exported files back and have their frame counts
@@ -236,6 +403,8 @@ src/style.css         layout, including the mobile breakpoint
 src/main.js           wiring: controls -> scene -> frame store -> exports
 src/scene.js          three.js scene, framing, lights
 src/loaders.js        format dispatch
+src/archive.js        the zip hunter: flatten, pick a model, find its textures
+src/mtl-fix.js        one .mtl repair, kept DOM-free so it can be tested
 src/capture.js        the frame store
 src/encoders/
   timing.js           delay grid + loop angles

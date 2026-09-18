@@ -300,6 +300,51 @@ button.primary:hover:not(:disabled) { filter: brightness(1.08); }
 .caution { color: var(--caution); font-weight: 600; }
 footer { padding: 0 4px 8px; }
 
+/*
+ * The Advanced picker in the 3D model section. Collapsed by default: it only
+ * has anything to say about zips that leave a real choice open, and even then
+ * the automatic answer is usually right.
+ */
+#advanced {
+  border-top: 1px solid var(--line);
+  margin-top: 10px;
+  padding-top: 8px;
+}
+#advanced[hidden] { display: none; }
+#advanced > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  list-style: revert;          /* keep the disclosure triangle */
+  padding: 2px 0;
+}
+#advanced > summary:hover { color: var(--text); }
+#advanced .row { grid-template-columns: 108px 1fr; margin-top: 8px; }
+#advanced .row[hidden] { display: none; }
+#advanced select { min-width: 0; }
+#advanced-note { margin: 8px 0 2px; }
+#advanced-note:empty { display: none; }
+
+#replacers[hidden] { display: none; }
+/*
+ * Each replacer is a Replace/With pair under its own heading. The rule above
+ * the heading is the divider: without it a run of four pairs reads as eight
+ * unrelated dropdowns rather than four things.
+ */
+.replacer-head {
+  margin: 12px 0 2px;
+  padding-top: 9px;
+  border-top: 1px dashed var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+/* The trailing empty pair is an invitation, not a setting. */
+.replacer-head.empty { opacity: 0.6; }
+
 /* --------------------------------------------------- mobile / touch layout
  * Width alone misses landscape tablets, so pointer:coarse is included too.
  * Being pure CSS, this switches instantly on rotation with no JS involved.
@@ -335,6 +380,14 @@ footer { padding: 0 4px 8px; }
 
   .row { grid-template-columns: 96px 1fr auto; }
   .row output { min-width: 56px; }
+
+  /*
+   * Stack the Advanced rows. These dropdowns hold filenames — "Adeleine
+   * Medium-High.dae" — and a 108px label column leaves them too narrow to
+   * tell two variants of the same model apart, which is the entire reason
+   * the picker exists.
+   */
+  #advanced .row { grid-template-columns: 1fr; gap: 4px; }
 
   /* Fit the view's toggles on one line on a phone. */
   #view-foot { font-size: 13px; gap: 6px 10px; }

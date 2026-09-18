@@ -16,6 +16,9 @@ import { frameDelaysMs, loopSummary, frameAngles, roundHalfToEven,
 import { muxAnimation } from '../src/encoders/webp.js';
 import { muxApng } from '../src/encoders/apng.js';
 import { encodePng } from '../src/encoders/png.js';
+import { openArchive, AssetIndex, rankModels, cleanPath, normKey, extOf, stemOf,
+         baseName, dirName, channelOf, nameAffinity } from '../src/archive.js';
+import { zipSync, strToU8 } from '../vendor/fflate.module.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const OUT = join(here, 'out');
@@ -132,6 +135,146 @@ if (existsSync(stillPath)) {
 } else {
   console.log('  FAIL  webp muxer fixtures missing'); failed++;
 }
+
+console.log('\narchive paths');
+check('backslashes become slashes', cleanPath('W:\\Art\\Textures\\Foo.png') === 'W:/Art/Textures/Foo.png');
+check('dot segments collapse', cleanPath('a/./b/../c/d.png') === 'a/c/d.png');
+check('leading slash dropped', cleanPath('/a/b.png') === 'a/b.png');
+check('basename', baseName('a/b/c.png') === 'c.png');
+check('dirname', dirName('a/b/c.png') === 'a/b');
+check('dirname at the root is empty', dirName('c.png') === '');
+check('extension lowercased', extOf('A/B.PNG') === 'png');
+check('a file with no extension', extOf('source/M1A2') === '');
+check('stem keeps its spaces', stemOf('a/Patchwork chair.obj') === 'Patchwork chair');
+// The rewrite packagers perform on the way into a zip: spaces become
+// underscores, so only a separator-blind key matches the two.
+check('normKey ignores separators',
+  normKey('DesertEagle_Desert Eagle_BaseColor') === normKey('DesertEagle_Desert_Eagle_BaseColor'));
+check('normKey keeps digits', normKey('#CAM0001_Textures_COL_4k') === 'cam0001texturescol4k');
+
+console.log('\ntexture channels');
+check('baseColor is colour', channelOf('t/Body_baseColor.png') === 'colour');
+check('albedo is colour', channelOf('t/lambert1_1001_albedo.jpeg') === 'colour');
+check('Defuse (sic) is colour', channelOf('t/Main_Defuse.jpg') === 'colour');
+check('COL is colour', channelOf('t/#CAM0001_Textures_COL_4k.png') === 'colour');
+// The trap: a careless colour test matching "color" would claim this one,
+// so the specific channels have to be tried first.
+check('metallicRoughness is not colour', channelOf('t/X_metallicRoughness.png') === 'roughness');
+check('normal is not colour', channelOf('t/X_normal.jpeg') === 'normal');
+check('NRML is not colour', channelOf('t/X_NRML_4k.png') === 'normal');
+check('AO is not colour', channelOf('t/lambert1_1001_AO.jpg') === 'ao');
+check('emissive is not colour', channelOf('t/X_emissive.png') === 'emissive');
+check('opacity is not colour', channelOf('t/X_OPAC_4k.png') === 'opacity');
+check('an unrecognised name is unknown', channelOf('t/01.png') === 'unknown');
+
+console.log('\nname affinity');
+check('an exact material name wins', nameAffinity('lambert1_1001', 't/lambert1_1001.png') === 100);
+check('the texture extends the material name',
+  nameAffinity('lambert1_1001', 't/lambert1_1001_albedo.jpeg') === 80);
+check('the material extends the texture name',
+  nameAffinity('capelliHI:lambert1SG', 't/capelli.png') === 80);
+// A couple of letters in common must never be enough to bind.
+check('unrelated names score nothing', nameAffinity('Material__25', 't/Track_Def.jpg') === 0);
+check('a null material never matches', nameAffinity('(null)', 't/01.png') === 0);
+
+console.log('\narchive hunting');
+const dot = encodePng({ data: new Uint8ClampedArray([255, 0, 0, 255]), width: 1, height: 1 });
+const OBJ = strToU8('mtllib Patchwork chair.mtl\nv 0 0 0\nusemtl material_0\n');
+
+function fakeFile(name, files) {
+  const bytes = zipSync(files);
+  return {
+    name,
+    arrayBuffer: async () =>
+      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+  };
+}
+
+// The Sketchfab shape: the model buried in source/, textures alongside it,
+// and a nested archive that has to be opened to reach anything at all.
+const bundle = await openArchive(fakeFile('b.zip', {
+  'license.txt': strToU8('not a model'),
+  '__MACOSX/._scene.obj': strToU8('resource fork'),
+  'textures/Body_baseColor.png': dot,
+  'source/inner.zip': zipSync({
+    'model/Patchwork chair.obj': OBJ,
+    'model/Patchwork chair.mtl': strToU8('newmtl material_0\n'),
+  }),
+}));
+check('a model inside a nested zip is found',
+  bundle.models[0]?.path === 'source/inner.zip!/model/Patchwork chair.obj',
+  JSON.stringify(bundle.models.map((m) => m.path)));
+check('nothing else is offered as a model', bundle.models.length === 1);
+check('__MACOSX entries are ignored',
+  ![...bundle.index.entries.keys()].some((p) => p.includes('__MACOSX')));
+check('files of no interest are never inflated',
+  ![...bundle.index.entries.keys()].some((p) => p.endsWith('license.txt')));
+
+const modelDir = dirName(bundle.models[0].path);
+check('a sidecar beside the model resolves',
+  bundle.index.find('Patchwork chair.mtl', modelDir)
+    === 'source/inner.zip!/model/Patchwork chair.mtl');
+check('a texture in the outer zip resolves from the inner model',
+  bundle.index.find('Body_baseColor.png', modelDir) === 'textures/Body_baseColor.png');
+check('an absolute Windows path resolves by its tail',
+  bundle.index.find('C:\\Users\\artist\\textures\\Body_baseColor.png', modelDir)
+    === 'textures/Body_baseColor.png');
+check('a genuinely missing reference resolves to nothing',
+  bundle.index.find('Abrams_Tank.mtl', modelDir) === null);
+
+// A .rar cannot be opened, and saying so beats failing silently.
+const opaque = await openArchive(fakeFile('r.zip', {
+  'source/model.rar': strToU8('Rar!'),
+  'textures/Body_baseColor.png': dot,
+}));
+check('a rar-only bundle yields no model', opaque.models.length === 0);
+check('the rar is reported', opaque.warnings.some((w) => w.includes('.rar')),
+  JSON.stringify(opaque.warnings));
+
+console.log('\nmodel ranking');
+// Several formats in one bundle: the one carrying real material data wins,
+// however much bigger the others are.
+const ranked = rankModels([
+  { path: 'source/model.obj', ext: 'obj', size: 300e6 },
+  { path: 'scene.gltf', ext: 'gltf', size: 5e3 },
+  { path: 'source/model.stl', ext: 'stl', size: 50e6 },
+]);
+check('glTF outranks a far larger OBJ', ranked[0].path === 'scene.gltf');
+check('OBJ outranks STL', ranked[1].path === 'source/model.obj');
+const lods = rankModels([
+  { path: 'model_LOD3.fbx', ext: 'fbx', size: 1e6 },
+  { path: 'model.fbx', ext: 'fbx', size: 1e6 },
+]);
+check('a LOD variant loses to the real model', lods[0].path === 'model.fbx');
+// A bake is usually the biggest file in the bundle, so size alone would let it
+// win against the model it was derived from.
+const bakes = rankModels([
+  { path: 'Penguin_bake.dae', ext: 'dae', size: 4e6 },
+  { path: 'Penguin.dae', ext: 'dae', size: 1e5 },
+]);
+check('a bake loses to the model it came from', bakes[0].path === 'Penguin.dae');
+
+console.log('\nasset lookup');
+// Two files sharing a basename in different folders: the suffix has to
+// decide, or a 4k texture gets served where a 2k one was asked for.
+const twin = new AssetIndex(new Map([
+  ['Textures/Tex_2k/COL.png', dot],
+  ['Textures/Tex_4k/COL.png', dot],
+]));
+check('a longer path suffix disambiguates a shared basename',
+  twin.find('Textures/Tex_4k/COL.png') === 'Textures/Tex_4k/COL.png');
+check('a bare basename still resolves to one of them', twin.find('COL.png') !== null);
+
+// '#' is legal in a filename and these bundles are full of it, so a
+// fragment can never simply be stripped.
+const hashed = new AssetIndex(new Map([['textures/#CAM0001_COL_4k.png', dot]]));
+check('a # in a filename is not treated as a fragment',
+  hashed.find('textures/#CAM0001_COL_4k.png') === 'textures/#CAM0001_COL_4k.png');
+check('a percent-encoded name still resolves',
+  hashed.find('textures/%23CAM0001_COL_4k.png') === 'textures/#CAM0001_COL_4k.png');
+// Packagers re-encode .tga as .png without rewriting the reference.
+check('a changed extension still resolves',
+  hashed.find('#CAM0001_COL_4k.tga') === 'textures/#CAM0001_COL_4k.png');
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

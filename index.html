@@ -24,8 +24,9 @@
       <canvas id="canvas"></canvas>
       <div id="dropzone">
         <div class="drop-inner">
-          <strong>Drop a 3D model here</strong>
+          <strong>Drop a 3D model or .zip here</strong>
           <span class="muted">GLB · GLTF · FBX · OBJ · STL · PLY · DAE · 3MF · USDZ · VOX · 3DS</span>
+          <span class="muted small">A .zip is searched for a model and its textures</span>
           <button id="browse-empty" class="primary">Choose a file…</button>
         </div>
       </div>
@@ -61,6 +62,29 @@
         <button id="browse">Browse…</button>
       </div>
       <p id="model-info" class="muted small">—</p>
+
+      <!--
+        Shown only when a zip leaves a genuine choice open: several models,
+        several material files, or a texture that had to be guessed. Each row
+        appears on its own, so a bundle with one ambiguity asks one question.
+      -->
+      <details id="advanced" hidden>
+        <summary>Advanced</summary>
+        <div class="row" id="row-model" hidden><label for="opt-model">Model</label>
+          <select id="opt-model"></select></div>
+        <div class="row" id="row-coords" hidden><label for="opt-coords">Texture setup</label>
+          <select id="opt-coords"></select></div>
+        <div class="row" id="row-texture" hidden><label for="opt-texture">Texture</label>
+          <select id="opt-texture"></select></div>
+        <!--
+          Swap materials' textures while the material data stays in charge of
+          the rest — a face for a different face out of the same folder. Built
+          in JS because the list grows: filling one replacer opens the next, so
+          a face split across two materials can be changed as a whole.
+        -->
+        <div id="replacers" hidden></div>
+        <p id="advanced-note" class="muted small"></p>
+      </details>
     </section>
 
     <section class="group">

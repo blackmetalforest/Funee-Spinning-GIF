@@ -8,7 +8,8 @@
  */
 
 import { SpinScene, DEFAULT_SETTINGS } from './scene.js';
-import { loadModel, FILE_ACCEPT, extensionOf, SELF_CONTAINED } from './loaders.js';
+import { loadModel, FILE_ACCEPT, SELF_CONTAINED, AUTO, NONE } from './loaders.js';
+import { baseName, stemOf, extOf, IMAGE_EXTENSIONS } from './archive.js';
 import { captureFrames, decodeFrames, storeSize } from './capture.js';
 import { loopSummary, FPS_LIMIT, frameAngles, frameDelaysMs,
          frameStarts, frameIndexAt } from './encoders/timing.js';
@@ -423,15 +424,69 @@ function applyAndPreview() {
 
 /* ------------------------------------------------------------- loading */
 
-async function handleFile(file) {
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"]/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+/**
+ * The second line of the model info, describing what was found in a zip.
+ *
+ * Worth its own line because a zip hides its contents: which model of the
+ * several inside was chosen, how many textures were matched to it, and — the
+ * part that has to be said out loud — how many of those were guessed from
+ * filenames rather than actually referenced by the model.
+ */
+function archiveNote(report, stats) {
+  if (!report) return '';
+  const parts = [`from ${escapeHtml(baseName(report.picked))}`];
+  if (report.models.length > 1) parts.push(`${report.models.length} models in zip`);
+
+  // Only images are worth counting: a glTF also pulls its .bin out of the
+  // archive, which is not something anyone thinks of as a texture.
+  const textures = [...report.bound].filter((path) => IMAGE_EXTENSIONS.has(extOf(path))).length;
+  if (textures) parts.push(`${textures} texture${textures === 1 ? '' : 's'}`);
+  if (report.guessed.length) {
+    parts.push(`<span class="caution">${report.guessed.length} matched by name</span>`);
+  }
+  if (report.missing.length) {
+    parts.push(`<span class="caution">${report.missing.length} missing</span>`);
+  }
+  if (!stats.textured) parts.push('<span class="caution">no textures found</span>');
+  for (const warning of report.warnings) {
+    parts.push(`<span class="caution">${escapeHtml(warning)}</span>`);
+  }
+  return `<br><span class="small">${parts.join(' · ')}</span>`;
+}
+
+
+/**
+ * The archive the panel is currently showing, and the combination chosen in
+ * it. Both are kept so that changing one dropdown can reload the same file
+ * with the rest of the choice intact.
+ */
+let currentFile = null;
+let currentChoice = null;
+/** The swaps the loaded model is actually showing, in the order asked for. */
+let appliedReplacements = [];
+/** What the picker is offering, kept so a replacer change can re-render. */
+let currentOptions = null;
+/** Replacer pairs as the picker currently shows them, trailing blank included. */
+let replacers = [];
+
+async function handleFile(file, choice = null) {
   if (!file) return;
-  const ext = extensionOf(file.name);
+  currentFile = file;
+  currentChoice = choice;
   setBusy(`Loading ${file.name}…`);
   try {
-    const { object, stats } = await loadModel(file, { creaseAngle: DEFAULT_SETTINGS.smoothAngle });
+    const { object, stats, report } = await loadModel(
+      file, { creaseAngle: DEFAULT_SETTINGS.smoothAngle, choice });
     scene.setModel(object);
     scene.applySettings(readSettings());
-    modelName = file.name.replace(/\.[^.]+$/, '');
+    // From a zip, the model inside names the export — "Patchwork chair" reads
+    // better than "patchwork_chair_obj_0".
+    modelName = stemOf(report ? report.picked : file.name);
     $('file-name').value = file.name;
 
     const bits = [
@@ -440,11 +495,15 @@ async function handleFile(file) {
     ];
     if (stats.textured) bits.push('textured');
     if (stats.vertexColours) bits.push('vertex colours');
-    // Formats that keep textures in external files usually arrive bare.
-    if (!stats.textured && !SELF_CONTAINED.has(ext)) {
-      bits.push('no textures found — .' + ext + ' often stores them separately');
+    // Formats that keep textures in external files usually arrive bare. Inside
+    // a zip those files are usually right there, so the advice only applies to
+    // a lone model file.
+    if (!stats.textured && !report && !SELF_CONTAINED.has(stats.ext)) {
+      bits.push('no textures found — .' + stats.ext + ' often stores them separately');
     }
-    $('model-info').textContent = bits.join(' · ');
+    $('model-info').innerHTML = escapeHtml(bits.join(' · ')) + archiveNote(report, stats);
+    appliedReplacements = report?.replacements ?? [];
+    showAdvanced(report);
 
     $('dropzone').hidden = true;
     canvas.classList.remove('empty');
@@ -454,10 +513,225 @@ async function handleFile(file) {
     if ($('preview').checked) startPlayback();   // requested before a model existed
   } catch (err) {
     console.error(err);
-    $('model-info').innerHTML = `<span class="warn">${err.message}</span>`;
+    $('model-info').innerHTML = `<span class="warn">${escapeHtml(err.message)}</span>`;
+    appliedReplacements = [];
+    // A model that will not load is exactly when the picker is wanted, so the
+    // options travel with the error rather than dying with it.
+    showAdvanced(err.report ?? null);
   } finally {
     setBusy('');
   }
+}
+
+/* ------------------------------------------------------------- advanced */
+
+/**
+ * Fill the Advanced picker in, and show only the rows that are a real
+ * question. A bundle holding one model, one material file and no guesswork
+ * has nothing to ask, so the whole section stays hidden.
+ */
+function showAdvanced(report) {
+  const panel = $('advanced');
+  const options = report?.options;
+  if (!options) {
+    panel.hidden = true;
+    panel.open = false;
+    return;
+  }
+
+  currentOptions = options;
+
+  const rows = [
+    ['model', options.models, report.chosen?.model],
+    ['coords', options.coords, report.chosen?.coords],
+    ['texture', options.textures, report.chosen?.texture],
+  ];
+
+  let asked = 0;
+  for (const [key, list, selected] of rows) {
+    const select = $(`opt-${key}`);
+    const row = $(`row-${key}`);
+    fillSelect(select, list, selected);
+    // One option is not a choice — except for the texture list, where the
+    // single entry is only ever the "automatic" placeholder.
+    const worthAsking = list.length > 1;
+    row.hidden = !worthAsking;
+    if (worthAsking) asked++;
+  }
+
+  // Swapping a material's texture only means anything while the material data
+  // is the thing in charge; forcing one texture over the whole model already
+  // overrides every binding there is.
+  const swapping = (report.chosen?.texture ?? AUTO) === AUTO
+    && (options.replaceFrom?.length ?? 0) > 1
+    && (options.replaceWith?.length ?? 0) > 1;
+
+  replacers = swapping
+    ? (report.replacements ?? []).map(({ material, texture }) => ({ material, texture }))
+    : [];
+  if (swapping) {
+    tidyReplacers();
+    renderReplacers();
+    asked++;
+  }
+  $('replacers').hidden = !swapping;
+
+  panel.hidden = asked === 0;
+  if (panel.hidden) panel.open = false;
+  $('advanced-note').textContent = panel.hidden ? ''
+    : (swapping ? `${ADVANCED_HINT} ${SWAP_HINT}` : ADVANCED_HINT);
+}
+
+/* ------------------------------------------------------ texture replacers */
+
+/**
+ * Keep the replacer list tidy: no abandoned blanks, and always one spare pair
+ * at the end so there is somewhere to start the next swap. Filling that spare
+ * is what makes the list grow.
+ *
+ * The spare is withheld once every material is spoken for — an empty pair whose
+ * only option is "Nothing" would be an invitation to nothing.
+ */
+function tidyReplacers() {
+  const materials = (currentOptions?.replaceFrom ?? []).filter((o) => o.value !== NONE);
+  replacers = replacers.filter((pair) => pair.material !== NONE);
+  if (replacers.length < materials.length) {
+    replacers.push({ material: NONE, texture: NONE });
+  }
+}
+
+/** Build the Replace/With pairs, each under its own numbered heading. */
+function renderReplacers() {
+  const host = $('replacers');
+  host.replaceChildren();
+  const materials = (currentOptions?.replaceFrom ?? []).filter((o) => o.value !== NONE);
+  const images = (currentOptions?.replaceWith ?? []).filter((o) => o.value !== NONE);
+
+  replacers.forEach((pair, i) => {
+    // A material already spoken for elsewhere is not offered again, so two
+    // replacers can never fight over the same one.
+    const taken = new Set(replacers
+      .filter((other, j) => j !== i && other.material !== NONE)
+      .map((other) => other.material));
+
+    const head = document.createElement('p');
+    head.className = 'replacer-head' + (pair.material === NONE ? ' empty' : '');
+    head.textContent = `Texture Replacer #${i + 1}`;
+    host.append(head);
+
+    host.append(replacerRow('Replace', i, 'material', pair.material,
+      [NOTHING, ...materials.filter((o) => !taken.has(o.value))]));
+    host.append(replacerRow('With', i, 'texture', pair.texture, [NOTHING, ...images]));
+  });
+}
+
+const NOTHING = { value: NONE, label: 'Nothing' };
+
+function replacerRow(label, index, field, selected, list) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  const id = `opt-replace-${index}-${field}`;
+
+  const caption = document.createElement('label');
+  caption.setAttribute('for', id);
+  caption.textContent = label;
+
+  const select = document.createElement('select');
+  select.id = id;
+  select.dataset.replacer = String(index);
+  select.dataset.field = field;
+  fillSelect(select, list, selected);
+
+  row.append(caption, select);
+  return row;
+}
+
+/**
+ * A replacer changed. Re-render either way — the other pairs' option lists
+ * depend on this one — but only reload when the set of *complete* pairs
+ * actually differs from what the model is showing. A pair with a material and
+ * no texture yet is a half-finished thought, and reloading on it would throw
+ * away the box that was just set.
+ */
+function replacerChanged(select) {
+  const index = Number(select.dataset.replacer);
+  const field = select.dataset.field;
+  const pair = replacers[index];
+  if (!pair) return;
+
+  pair[field] = select.value;
+  if (field === 'material' && select.value === NONE) pair.texture = NONE;
+
+  tidyReplacers();
+  renderReplacers();
+
+  if (!sameReplacements(completeReplacers(), appliedReplacements)) reloadWithChoice('replacers');
+}
+
+function completeReplacers() {
+  return replacers
+    .filter((p) => p.material !== NONE && p.texture !== NONE)
+    .map(({ material, texture }) => ({ material, texture }));
+}
+
+function sameReplacements(a, b) {
+  return a.length === b.length
+    && a.every((p, i) => p.material === b[i].material && p.texture === b[i].texture);
+}
+
+$('replacers').addEventListener('change', (event) => {
+  const select = event.target.closest('select[data-replacer]');
+  if (select) replacerChanged(select);
+});
+
+const ADVANCED_HINT =
+  'Mix and match if the model looks wrong. Changing the model picks its '
+  + 'matching texture setup again.';
+
+const SWAP_HINT = 'Fill in a replacer to swap one material\u2019s texture; another opens below it.';
+
+function fillSelect(select, list, selected) {
+  select.replaceChildren();
+  for (const { value, label } of list) {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    if (value === selected) option.selected = true;
+    select.append(option);
+  }
+  // Nothing matched, so show what is actually in force rather than implying
+  // the first entry was chosen.
+  if (select.selectedIndex < 0 && select.options.length) select.selectedIndex = 0;
+}
+
+/** Re-load the current archive with whatever the picker now says. */
+function reloadWithChoice(changed) {
+  if (!currentFile) return;
+  const choice = {
+    model: $('opt-model').value || null,
+    coords: $('opt-coords').value || null,
+    texture: $('opt-texture').value || null,
+    replacements: completeReplacers(),
+  };
+  // Choosing a different model invalidates the other two: its material file
+  // and textures are its own, and re-deriving them is the whole point of
+  // "a .dae switches to the new texture setup".
+  if (changed === 'model') {
+    choice.coords = null;
+    choice.texture = AUTO;
+  }
+  // A swap names materials out of one material file. Change the model or the
+  // file and those names may not exist any more, so the replacers start over.
+  if (changed === 'model' || changed === 'coords') {
+    replacers = [];
+    choice.replacements = [];
+  }
+
+  handleFile(currentFile, choice);
+}
+
+for (const key of ['model', 'coords', 'texture']) {
+  $(`opt-${key}`).addEventListener('change', () => reloadWithChoice(key));
 }
 
 function discardStore() {
