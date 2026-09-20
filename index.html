@@ -90,16 +90,16 @@
     <section class="group">
       <h2>View</h2>
       <div class="row"><label for="elevation">View angle</label>
-        <input type="range" id="elevation" min="-89" max="89" step="1" value="20">
+        <input type="range" id="elevation" min="-90" max="90" step="1" value="20">
         <output for="elevation" id="elevation-out">20°</output></div>
       <div class="row"><label for="start">Start rotation</label>
         <input type="range" id="start" min="0" max="359" step="1" value="0">
         <output for="start" id="start-out">0°</output></div>
       <div class="row"><label for="fov">Field of view</label>
-        <input type="range" id="fov" min="10" max="160" step="1" value="35">
+        <input type="range" id="fov" min="10" max="150" step="1" value="35">
         <output for="fov" id="fov-out">35°</output></div>
       <div class="row"><label for="zoom">Zoom</label>
-        <input type="range" id="zoom" min="0.3" max="3" step="0.05" value="1">
+        <input type="range" id="zoom" min="0.3" max="5" step="0.05" value="1">
         <output for="zoom" id="zoom-out">1.00×</output></div>
       <div class="row actions"><button id="reset-view">Reset to defaults</button></div>
     </section>
@@ -113,14 +113,14 @@
           <option value="ccw">Counter-clockwise</option>
         </select></div>
       <div class="row"><label for="speed">Spin speed</label>
-        <input type="range" id="speed" min="0" max="10" step="0.01" value="0.25">
-        <output for="speed" id="speed-out">0.25 r/s</output></div>
+        <input type="range" id="speed" min="0" max="10" step="0.01" value="0.3">
+        <output for="speed" id="speed-out">0.30 r/s</output></div>
       <div class="row"><label for="fps">Frame rate</label>
-        <input type="range" id="fps" min="0" max="60" step="1" value="12">
-        <output for="fps" id="fps-out">12 fps</output></div>
+        <input type="range" id="fps" min="0" max="50" step="1" value="30">
+        <output for="fps" id="fps-out">30 fps</output></div>
       <div class="row"><label>Frames</label>
         <span class="muted small" id="frames-note">frame rate ÷ spin speed</span>
-        <output id="frames-out">48</output></div>
+        <output id="frames-out">100</output></div>
       <p id="loop-info" class="muted small">—</p>
     </section>
 
@@ -134,22 +134,22 @@
         </select></div>
       <p class="muted small">Moves the model around the rotation point. Most
         models need no adjustment.</p>
-      <div class="row"><label for="pos-x">Move X</label>
+      <div class="row"><label for="pos-x">X (Move Left)</label>
         <input type="range" id="pos-x" min="-2" max="2" step="0.01" value="0">
         <output for="pos-x" id="pos-x-out">0.00</output></div>
-      <div class="row"><label for="pos-y">Move Y</label>
+      <div class="row"><label for="pos-y">Y (Move Up)</label>
         <input type="range" id="pos-y" min="-2" max="2" step="0.01" value="0">
         <output for="pos-y" id="pos-y-out">0.00</output></div>
-      <div class="row"><label for="pos-z">Move Z</label>
+      <div class="row"><label for="pos-z">Z (Move Forward)</label>
         <input type="range" id="pos-z" min="-2" max="2" step="0.01" value="0">
         <output for="pos-z" id="pos-z-out">0.00</output></div>
-      <div class="row"><label for="pitch">Pitch</label>
+      <div class="row"><label for="pitch">Pitch (Forward)</label>
         <input type="range" id="pitch" min="-180" max="180" step="1" value="0">
         <output for="pitch" id="pitch-out">0°</output></div>
-      <div class="row"><label for="yaw">Yaw</label>
+      <div class="row"><label for="yaw">Yaw (Right)</label>
         <input type="range" id="yaw" min="-180" max="180" step="1" value="0">
         <output for="yaw" id="yaw-out">0°</output></div>
-      <div class="row"><label for="roll">Roll</label>
+      <div class="row"><label for="roll">Roll (Left)</label>
         <input type="range" id="roll" min="-180" max="180" step="1" value="0">
         <output for="roll" id="roll-out">0°</output></div>
       <div class="row actions"><button id="reset-position">Reset to defaults</button></div>
@@ -157,12 +157,6 @@
 
     <section class="group">
       <h2>Image</h2>
-      <div class="row"><label for="width">Width</label>
-        <input type="number" id="width" min="32" max="2000" step="1" value="480"></div>
-      <div class="row"><label for="height">Height</label>
-        <input type="number" id="height" min="32" max="2000" step="1" value="480"></div>
-      <div class="row"><label for="square">Square</label>
-        <input type="checkbox" id="square" checked></div>
       <div class="row"><label for="preset">Preset</label>
         <select id="preset">
           <option value="">Custom</option>
@@ -171,6 +165,12 @@
           <option>600</option><option>720</option><option>800</option>
           <option>1000</option>
         </select></div>
+      <div class="row"><label for="width">Width</label>
+        <input type="number" id="width" min="32" max="2000" step="1" value="480"></div>
+      <div class="row"><label for="height">Height</label>
+        <input type="number" id="height" min="32" max="2000" step="1" value="480"></div>
+      <div class="row"><label for="square">Square</label>
+        <input type="checkbox" id="square" checked></div>
       <div class="row"><label for="quality">Quality</label>
         <select id="quality">
           <option value="1" selected>Fast (MSAA only)</option>
@@ -181,8 +181,6 @@
         <input type="color" id="background" value="#181a20"></div>
       <div class="row"><label for="transparent">Transparent</label>
         <input type="checkbox" id="transparent" checked></div>
-      <div class="row"><label for="textures">Textures</label>
-        <input type="checkbox" id="textures" checked></div>
     </section>
 
     <section class="group">

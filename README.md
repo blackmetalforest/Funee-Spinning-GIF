@@ -20,6 +20,8 @@ no build step and no backend — it's a static site.
   flagging it when that count gets expensive. Either one at zero is a stopped
   spin, which exports as a single still
 - Keeps **exact timing** — 48 frames at 0.25 rounds/s totals 4.000 s, not 3.97
+- **Double-click any slider's number** to type a value, including values past
+  the slider's own ends — a 250x zoom, a 0.001 rounds/s crawl
 - Exports with real transparency
 
 ## Running it locally
@@ -234,6 +236,10 @@ control defaults to zero.
 Translation is in **bounding-sphere radii**: the model is normalised to radius 1
 on load, so 1.0 shifts it by its own radius whatever its real-world scale.
 Rotations apply in YXZ order (yaw, then pitch, then roll).
+
+Each label names what a *positive* value does. The sliders cover ±2 radii,
+which is all most framing needs; double-clicking the number takes a translation
+out to ±100 for the rare model that arrives wildly off its own origin.
 
 The camera's depth planes follow the offset, so moving the model toward the lens
 does not clip it. They used to be fitted to the origin alone, which gave a fixed

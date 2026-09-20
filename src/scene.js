@@ -408,12 +408,18 @@ export class SpinScene {
     const s = this.settings;
     const aspect = s.width / s.height;
     const radius = 1.0;
-    const margin = 1.06 / Math.max(0.2, s.zoom);
-    const fov = THREE.MathUtils.degToRad(Math.min(160, Math.max(5, s.fov)));
+    const margin = 1.06 / Math.max(0.01, s.zoom);
+    // A typed field of view reaches 180, which the camera cannot use: at
+    // exactly 180 the projection's tan(fov/2) is infinite and nothing draws.
+    // A tenth of a degree short is indistinguishable and always finite.
+    const fov = THREE.MathUtils.degToRad(Math.min(179.9, Math.max(1, s.fov)));
     // Fit the tighter of the two axes: a portrait frame needs more distance.
     const half = Math.atan(Math.min(Math.tan(fov / 2), Math.tan(fov / 2) * aspect));
     const dist = (radius * margin) / Math.sin(half);
-    const elev = THREE.MathUtils.degToRad(Math.max(-89.5, Math.min(89.5, s.elevation)));
+    // The slider reaches a true 90, but the camera cannot: straight down the
+    // up axis leaves lookAt() with no way to orient the horizon, and the view
+    // flips or goes blank. A tenth of a degree short is invisible and safe.
+    const elev = THREE.MathUtils.degToRad(Math.max(-89.9, Math.min(89.9, s.elevation)));
 
     // Half the visible height at the origin plane. Used to keep the axis guide
     // inside the frame; a vertical line foreshortens as the camera is raised,

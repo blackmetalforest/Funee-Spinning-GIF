@@ -244,7 +244,24 @@ html, body {
 .row.actions { grid-template-columns: 1fr auto; }
 #frames-note { font-style: italic; }
 .row.file-row { grid-template-columns: 1fr auto; }
-.row output { font-variant-numeric: tabular-nums; min-width: 64px; text-align: right; }
+.row output { font-variant-numeric: tabular-nums; min-width: 64px; text-align: right; cursor: text; }
+
+/*
+ * The box a slider's reading turns into when you double-click it. Sized to
+ * roughly the reading it replaces so the row does not jump, and the spinners
+ * go because at this width they would cost more than they are worth.
+ */
+.row input.number-edit {
+  width: 84px;
+  min-width: 0;
+  padding: 3px 5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.row input.number-edit::-webkit-outer-spin-button,
+.row input.number-edit::-webkit-inner-spin-button { appearance: none; margin: 0; }
 
 input[type="range"] {
   width: 100%;
@@ -378,8 +395,11 @@ footer { padding: 0 4px 8px; }
     border-right: none;
   }
 
-  .row { grid-template-columns: 96px 1fr auto; }
+  /* 96px wrapped the longest label, "Z (Move Forward)", onto two lines. */
+  .row { grid-template-columns: 104px 1fr auto; }
   .row output { min-width: 56px; }
+  /* Match the reading it replaces, so editing barely narrows the slider. */
+  .row input.number-edit { width: 64px; }
 
   /*
    * Stack the Advanced rows. These dropdowns hold filenames — "Adeleine

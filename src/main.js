@@ -57,7 +57,8 @@ function readSettings() {
     zoom: +$('zoom').value,
     background: $('background').value,
     transparent: $('transparent').checked,
-    shadeTexture: $('textures').checked,
+    // No longer a control: textures are always used when a model has them.
+    shadeTexture: true,
     ambient: +$('ambient').value,
     keyLight: +$('key').value,
     fillLight: +$('fill').value,
@@ -108,7 +109,7 @@ function framesFor(fps, rps) {
 }
 
 function readSpin() {
-  const rps = snapSpeed(+$('speed').value);
+  const rps = +$('speed').value;
   const { frames, stopped } = framesFor(+$('fps').value, rps);
   return { frames, rps, stopped, clockwise: $('direction').value === 'cw' };
 }
@@ -120,22 +121,37 @@ function clampInt(value, lo, hi, fallback) {
 
 /* ------------------------------------------------------------- display */
 
+/**
+ * A reading that stays legible across a typed range.
+ *
+ * Two decimals is right for the ranges the sliders offer, and wrong at both
+ * ends of the ranges you can now type: 0.001 r/s reads as "0.00" and a 250x
+ * zoom wastes the width on zeroes. Precision follows magnitude instead.
+ */
+function trim(value) {
+  const size = Math.abs(value);
+  if (size >= 100) return value.toFixed(0);
+  if (size >= 10) return value.toFixed(1);
+  if (size !== 0 && size < 0.01) return value.toFixed(3);
+  return value.toFixed(2);
+}
+
 function syncOutputs() {
   $('elevation-out').textContent = `${$('elevation').value}°`;
   $('start-out').textContent = `${$('start').value}°`;
   $('fov-out').textContent = `${$('fov').value}°`;
-  $('zoom-out').textContent = `${(+$('zoom').value).toFixed(2)}×`;
-  const rps = snapSpeed(+$('speed').value);
+  $('zoom-out').textContent = `${trim(+$('zoom').value)}×`;
+  const rps = +$('speed').value;
   const fps = +$('fps').value;
-  $('speed-out').textContent = rps > 0 ? `${rps.toFixed(2)} r/s` : 'stopped';
+  $('speed-out').textContent = rps > 0 ? `${trim(rps)} r/s` : 'stopped';
   $('fps-out').textContent = fps > 0 ? `${fps} fps` : 'stopped';
   syncFrameCount();
   for (const id of ['ambient', 'key', 'fill', 'rim', 'specular']) {
-    $(`${id}-out`).textContent = (+$(id).value).toFixed(2);
+    $(`${id}-out`).textContent = trim(+$(id).value);
   }
   $('shininess-out').textContent = $('shininess').value;
   for (const id of ['pos-x', 'pos-y', 'pos-z']) {
-    $(`${id}-out`).textContent = (+$(id).value).toFixed(2);
+    $(`${id}-out`).textContent = trim(+$(id).value);
   }
   for (const id of ['pitch', 'yaw', 'roll']) {
     $(`${id}-out`).textContent = `${$(id).value}°`;
@@ -149,7 +165,7 @@ function syncOutputs() {
  * which the loop summary underneath then shows as a lower figure.
  */
 function syncFrameCount() {
-  const { frames, ideal, stopped } = framesFor(+$('fps').value, snapSpeed(+$('speed').value));
+  const { frames, ideal, stopped } = framesFor(+$('fps').value, +$('speed').value);
   const out = $('frames-out');
   out.textContent = frames;
   if (stopped) {
@@ -412,9 +428,6 @@ function schedulePreview() {
 }
 
 function applyAndPreview() {
-  // Rewrite the control, not just the reading, so the thumb visibly lands on
-  // zero rather than sitting in a dead zone that behaves as stopped.
-  if (+$('speed').value > 0 && +$('speed').value < MIN_RPS) $('speed').value = 0;
   syncOutputs();
   updateLoopInfo();
   updateViewSize();
@@ -741,11 +754,163 @@ function discardStore() {
   $('save-info').textContent = '';
 }
 
+/* --------------------------------------------------- typing a value in */
+
+/**
+ * Ranges that can be *typed* into a slider's reading, where those are wider
+ * than the slider itself.
+ *
+ * The two jobs are different. A slider has to spend its width on the values
+ * worth dragging through, so Zoom stops at 5x; but a 200x close-up on one
+ * rivet is a real thing to want, and making the slider reach it would turn
+ * every ordinary adjustment into a two-pixel target. So the slider keeps the
+ * useful range and typing is the way past it.
+ *
+ * Anything not listed is still editable — its typed range is simply the
+ * slider's own.
+ */
+const TEXT_RANGE = {
+  fov: [1, 180],
+  zoom: [0.1, 1000],
+  speed: [0.001, 100],
+  'pos-x': [-100, 100], 'pos-y': [-100, 100], 'pos-z': [-100, 100],
+  /*
+   * Rendering. Light intensities and the specular colour are plain
+   * multipliers that three.js never clamps, so these ceilings are "long past
+   * any visible difference" rather than a limit of the engine — ambient alone
+   * is white at about 3. Shininess is the Blinn-Phong exponent, where the
+   * highlight is narrower than a pixel well before a thousand.
+   */
+  ambient: [0, 100], key: [0, 100], fill: [0, 100], rim: [0, 100],
+  specular: [0, 100], shininess: [1, 1000],
+};
+
+/** Each slider's own range, captured before anything widens it. */
+const baseRanges = new Map(RANGE_IDS.map((id) => {
+  const el = $(id);
+  return [id, { min: +el.min, max: +el.max, step: el.step }];
+}));
+
+function textRange(id) {
+  const base = baseRanges.get(id);
+  return TEXT_RANGE[id] ?? [base.min, base.max];
+}
+
+/**
+ * Put a value on a slider, stretching the slider if it will not otherwise
+ * reach.
+ *
+ * The input keeps holding the value — there is no second copy of it to fall
+ * out of step with the control. The cost is that a slider showing an extreme
+ * is briefly coarse, which is the honest trade: you are at 250x because you
+ * typed 250x, and dragging back to the left end returns both the value and
+ * the normal scale.
+ */
+function setSliderValue(id, value) {
+  const el = $(id);
+  const base = baseRanges.get(id);
+  const outside = value < base.min || value > base.max;
+  const step = +base.step;
+  // A range input snaps whatever you assign to its step grid, so a typed
+  // 0.001 on a 0.01 slider would quietly become 0.
+  const offGrid = step > 0 && Math.abs(value / step - Math.round(value / step)) > 1e-9;
+
+  el.min = Math.min(base.min, value);
+  el.max = Math.max(base.max, value);
+  el.step = (outside || offGrid) ? 'any' : base.step;
+  el.value = value;
+}
+
+/**
+ * Give a stretched slider its usual scale back once the value fits again.
+ *
+ * Deliberately on `change` and not `input`: rescaling mid-drag would move the
+ * thumb out from under the finger holding it.
+ */
+function normaliseRange(id) {
+  const el = $(id);
+  const base = baseRanges.get(id);
+  const value = +el.value;
+  if (value >= base.min && value <= base.max) { el.min = base.min; el.max = base.max; }
+  const step = +base.step;
+  if (!(step > 0) || Math.abs(value / step - Math.round(value / step)) < 1e-9) {
+    el.step = base.step;
+  }
+}
+
+/**
+ * Double-clicking a slider's reading turns it into a box you can type in.
+ *
+ * The typed value goes back out as an ordinary `input` event on the slider
+ * rather than through a private path, so everything already watching that
+ * control — the preview, the frame store, the axis flash — reacts exactly as
+ * it does to a drag, with no second set of rules to keep in step.
+ */
+function editNumber(id) {
+  const out = $(`${id}-out`);
+  if (out.hidden) return;                       // already editing this one
+  const [lo, hi] = textRange(id);
+
+  const box = document.createElement('input');
+  box.type = 'number';
+  box.className = 'number-edit';
+  box.value = String(+$(id).value);
+  box.min = lo;
+  box.max = hi;
+  box.step = 'any';
+  box.title = `${lo} to ${hi}`;
+
+  let closed = false;
+  const close = (commit) => {
+    if (closed) return;                         // blur fires again on removal
+    closed = true;
+    const typed = parseFloat(box.value);
+    box.remove();
+    out.hidden = false;
+    if (!commit || !Number.isFinite(typed)) return;
+    setSliderValue(id, Math.min(hi, Math.max(lo, typed)));
+    // `typed` marks this as not a drag, which exempts it from the speed
+    // slider's snap-to-stopped.
+    $(id).dispatchEvent(new CustomEvent('input', { bubbles: true, detail: { typed: true } }));
+    $(id).dispatchEvent(new Event('change', { bubbles: true }));
+  };
+
+  box.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); close(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); close(false); }
+  });
+  box.addEventListener('blur', () => close(true));
+
+  out.hidden = true;
+  out.after(box);
+  box.focus();
+  box.select();
+}
+
 /* -------------------------------------------------------------- events */
 
+/*
+ * The slider's bottom end snaps to a dead stop rather than offering speeds
+ * nobody wants. Typing is exempt: 0.001 r/s is a deliberate choice by the time
+ * someone has entered it by hand. Registered before the listener below so the
+ * value is already corrected when the preview reads it.
+ */
+$('speed').addEventListener('input', (e) => {
+  if (e.detail?.typed) return;
+  // Rewrite the control, not just the reading, so the thumb visibly lands on
+  // zero rather than sitting in a dead zone that behaves as stopped.
+  if (+$('speed').value > 0 && +$('speed').value < MIN_RPS) $('speed').value = 0;
+});
+
 for (const id of RANGE_IDS) $(id).addEventListener('input', applyAndPreview);
+
+for (const id of RANGE_IDS) {
+  $(`${id}-out`).addEventListener('dblclick', () => editNumber(id));
+  $(`${id}-out`).title = 'Double-click to type a value';
+  $(id).addEventListener('change', () => normaliseRange(id));
+}
 for (const id of ['up-axis', 'direction', 'quality', 'background', 'transparent',
-  'textures', 'width', 'height']) {
+  'width', 'height']) {
   $(id).addEventListener('input', () => { discardStore(); applyAndPreview(); });
 }
 
@@ -770,34 +935,34 @@ $('preset').addEventListener('change', () => {
 });
 
 $('reset-view').addEventListener('click', () => {
-  $('elevation').value = DEFAULT_SETTINGS.elevation;
-  $('start').value = DEFAULT_SETTINGS.startAngle;
+  setSliderValue('elevation', DEFAULT_SETTINGS.elevation);
+  setSliderValue('start', DEFAULT_SETTINGS.startAngle);
   $('up-axis').value = DEFAULT_SETTINGS.upAxis;
-  $('fov').value = DEFAULT_SETTINGS.fov;
-  $('zoom').value = DEFAULT_SETTINGS.zoom;
+  setSliderValue('fov', DEFAULT_SETTINGS.fov);
+  setSliderValue('zoom', DEFAULT_SETTINGS.zoom);
   discardStore();
   applyAndPreview();
 });
 
 $('reset-position').addEventListener('click', () => {
-  $('pos-x').value = DEFAULT_SETTINGS.posX;
-  $('pos-y').value = DEFAULT_SETTINGS.posY;
-  $('pos-z').value = DEFAULT_SETTINGS.posZ;
-  $('pitch').value = DEFAULT_SETTINGS.pitch;
-  $('yaw').value = DEFAULT_SETTINGS.yaw;
-  $('roll').value = DEFAULT_SETTINGS.roll;
+  setSliderValue('pos-x', DEFAULT_SETTINGS.posX);
+  setSliderValue('pos-y', DEFAULT_SETTINGS.posY);
+  setSliderValue('pos-z', DEFAULT_SETTINGS.posZ);
+  setSliderValue('pitch', DEFAULT_SETTINGS.pitch);
+  setSliderValue('yaw', DEFAULT_SETTINGS.yaw);
+  setSliderValue('roll', DEFAULT_SETTINGS.roll);
   discardStore();
   applyAndPreview();
   flashAxis();
 });
 
 $('reset-render').addEventListener('click', () => {
-  $('ambient').value = DEFAULT_SETTINGS.ambient;
-  $('key').value = DEFAULT_SETTINGS.keyLight;
-  $('fill').value = DEFAULT_SETTINGS.fillLight;
-  $('rim').value = DEFAULT_SETTINGS.rimLight;
-  $('specular').value = DEFAULT_SETTINGS.specular;
-  $('shininess').value = DEFAULT_SETTINGS.shininess;
+  setSliderValue('ambient', DEFAULT_SETTINGS.ambient);
+  setSliderValue('key', DEFAULT_SETTINGS.keyLight);
+  setSliderValue('fill', DEFAULT_SETTINGS.fillLight);
+  setSliderValue('rim', DEFAULT_SETTINGS.rimLight);
+  setSliderValue('specular', DEFAULT_SETTINGS.specular);
+  setSliderValue('shininess', DEFAULT_SETTINGS.shininess);
   applyAndPreview();
 });
 
