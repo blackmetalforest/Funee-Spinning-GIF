@@ -154,6 +154,22 @@ every mesh in the file. A column of those cannot be scanned, and clipping it
 short just makes every row identical. Hover a box and the tooltip gives you
 whatever the file does say, plus the triangle count.
 
+**Point at a box and its mesh blinks** at 10 Hz, which is how you find out
+which one it is without ticking it and comparing two renders by eye. The blink
+alternates against whatever state the mesh is already in — a ticked mesh winks
+out, an unticked one winks in — so the thing that moves is always the thing
+that box controls. On a touch screen, hold the box instead. Nothing about the
+blink is committed: it is a look, not a change, and the real state comes back
+the moment you move away. It never reaches a render, and anyone who has asked
+their system for reduced motion gets the same information held steady instead
+of strobed.
+
+Each phase of the blink is scheduled only after the previous one has finished
+drawing. A plain interval would keep queueing frames on a machine where one
+costs more than the gap between them — a heavy model on a phone, or anything
+falling back to software GL — until the page stopped responding; draining
+first turns that into a slower blink.
+
 Unticking a mesh hides it from the preview and from every export — three.js
 simply does not draw it, so there is nothing for the encoders to get wrong.
 **Framing deliberately does not follow**: the model keeps the size and centre

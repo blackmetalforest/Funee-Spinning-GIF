@@ -499,6 +499,7 @@ let hiddenMeshes = new Set();
 
 async function handleFile(file, choice = null) {
   if (!file) return;
+  stopMeshFlash();
   // A new file is a new tree; walk positions from the last one mean nothing.
   if (!choice) hiddenMeshes = new Set();
   currentFile = file;
@@ -621,6 +622,7 @@ function renderMeshList() {
   const panel = $('meshes');
   const host = $('mesh-list');
   const list = scene.meshList();
+  stopMeshFlash();
 
   // A walk position past the end of the current tree cannot refer to
   // anything, so it is dropped rather than left to skew the counts.
@@ -639,6 +641,7 @@ function renderMeshList() {
   for (const { index, label, title } of labelMeshes(list)) {
     const row = document.createElement('label');
     row.className = 'mesh-row';
+    row.dataset.mesh = String(index);
     // The name and triangle count the label no longer shows live here, where
     // they cost no width.
     row.title = title;
@@ -673,7 +676,82 @@ function applyMeshVisibility() {
   scene.setHiddenMeshes(hiddenMeshes);
   syncMeshChrome(scene.meshList().length);
   discardStore();
-  schedulePreview();
+  // Ticking a box under a flashing pointer moves the baseline the flash is
+  // measured against, so repaint from the new one rather than let the two
+  // fight over the same meshes.
+  if (meshFlash) paintMeshFlash();
+  else schedulePreview();
+}
+
+/* ------------------------------------------------------- flashing a mesh */
+
+/*
+ * Pointing at a checkbox blinks its mesh.
+ *
+ * The boxes are numbered, and a number says nothing about which part of the
+ * model it is — so this is how you find out, short of ticking it and
+ * comparing two renders by eye. The blink alternates the mesh against
+ * whatever state it is already in: a ticked mesh winks out, an unticked one
+ * winks in. Either way the thing that moves is the thing that box controls.
+ *
+ * Nothing here touches `hiddenMeshes`. The flash is a look, not a change, and
+ * it puts the real state back the moment the pointer leaves.
+ */
+const FLASH_MS = 50;            // half a cycle — 50 on, 50 off, so 10 Hz
+
+// A 10 Hz strobe is squarely in the band that bothers photosensitive people.
+// It is a small part of one panel rather than the whole screen, but anyone who
+// has asked for less motion gets the same information held steady instead.
+const stillPlease = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+
+let meshFlash = null;           // { index, timer, inverted }
+
+function startMeshFlash(index) {
+  if (meshFlash?.index === index) return;
+  stopMeshFlash();
+  if (!scene.model || rendering || !Number.isFinite(index)) return;
+
+  meshFlash = { index, timer: 0, inverted: true };
+  paintMeshFlash();
+  if (!stillPlease?.matches) scheduleFlashPhase();
+}
+
+/*
+ * Each phase is scheduled only once the one before it has finished painting.
+ *
+ * A plain setInterval is the obvious way to write this and the wrong one: it
+ * keeps queueing phases whether or not the last render returned, so any
+ * machine where a frame costs more than FLASH_MS — a heavy model on a phone,
+ * or anything falling back to software GL — backs up until the page stops
+ * responding at all. Draining first turns that failure into a slower blink.
+ */
+function scheduleFlashPhase() {
+  meshFlash.timer = setTimeout(() => {
+    if (!meshFlash) return;
+    meshFlash.inverted = !meshFlash.inverted;
+    paintMeshFlash();
+    scheduleFlashPhase();
+  }, FLASH_MS);
+}
+
+function paintMeshFlash() {
+  if (!meshFlash) return;
+  const phase = new Set(hiddenMeshes);
+  if (meshFlash.inverted) {
+    if (phase.has(meshFlash.index)) phase.delete(meshFlash.index);
+    else phase.add(meshFlash.index);
+  }
+  scene.setHiddenMeshes(phase);
+  scene.render();
+}
+
+function stopMeshFlash() {
+  if (!meshFlash) return;
+  clearTimeout(meshFlash.timer);
+  meshFlash = null;
+  if (!scene.model) return;
+  scene.setHiddenMeshes(hiddenMeshes);
+  scene.render();
 }
 
 /* ------------------------------------------------------ texture replacers */
@@ -844,6 +922,38 @@ $('mesh-list').addEventListener('change', (e) => {
   else hiddenMeshes.add(index);
   applyMeshVisibility();
 });
+
+/*
+ * Delegated, because the rows are rebuilt per model. pointerover/out rather
+ * than mouseenter/leave: those do not bubble, so delegation needs the pair
+ * that does, plus a relatedTarget check so crossing from the label onto its
+ * own checkbox does not read as leaving.
+ */
+$('mesh-list').addEventListener('pointerover', (e) => {
+  const row = e.target.closest?.('.mesh-row');
+  if (row) startMeshFlash(+row.dataset.mesh);
+});
+$('mesh-list').addEventListener('pointerout', (e) => {
+  const row = e.target.closest?.('.mesh-row');
+  if (row && !row.contains(e.relatedTarget)) stopMeshFlash();
+});
+
+// Touch has no hover, so there holding a box is what starts it. Mouse is left
+// to pointerover alone: stopping on mouse-up would kill the flash the instant
+// you ticked a box, with the pointer still sitting on it.
+$('mesh-list').addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'mouse') return;
+  const row = e.target.closest?.('.mesh-row');
+  if (row) startMeshFlash(+row.dataset.mesh);
+});
+for (const type of ['pointerup', 'pointercancel']) {
+  window.addEventListener(type, (e) => {
+    if (e.pointerType !== 'mouse') stopMeshFlash();
+  });
+}
+// A scrolled-away or hidden list must not keep blinking.
+$('mesh-list').addEventListener('scroll', stopMeshFlash);
+window.addEventListener('blur', stopMeshFlash);
 
 $('mesh-toggle-all').addEventListener('click', () => {
   const total = scene.meshList().length;
@@ -1149,6 +1259,7 @@ $('render').addEventListener('click', async () => {
   rendering = true;
   cancelRequested = false;
   stopAxisFlash();          // a fade must not carry into the capture
+  stopMeshFlash();          // nor a blinking mesh
   stopPlayback({ rewind: false });
 
   discardStore();
