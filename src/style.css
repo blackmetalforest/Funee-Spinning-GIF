@@ -344,6 +344,48 @@ footer { padding: 0 4px 8px; }
 #advanced-note { margin: 8px 0 2px; }
 #advanced-note:empty { display: none; }
 
+/*
+ * The mesh picker: a disclosure inside the Advanced disclosure, because the
+ * list is per-model and can run to dozens of entries. It scrolls in its own
+ * box so a busy model cannot push the rest of the panel off the screen.
+ */
+#meshes { margin-top: 8px; }
+#meshes[hidden] { display: none; }
+#meshes > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  list-style: revert;
+}
+#mesh-toggle-all { margin: 8px 0 6px; }
+/*
+ * The boxes are labelled by position alone, so they wrap into a grid rather
+ * than stacking: twenty-one full-width rows each reading "7" would be almost
+ * entirely whitespace, and three wrapped lines can be taken in at a glance.
+ */
+#mesh-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  max-height: 240px;
+  overflow-y: auto;
+  /* Its own edge, so a half-scrolled list reads as a list and not as the end
+     of the panel. */
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 5px 7px;
+}
+.mesh-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.mesh-row input { flex: none; margin: 0; }
+
 #replacers[hidden] { display: none; }
 /*
  * Each replacer is a Replace/With pair under its own heading. The rule above

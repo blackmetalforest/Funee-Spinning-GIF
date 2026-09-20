@@ -275,6 +275,58 @@ export class SpinScene {
   }
 
   /**
+   * Walk every mesh in the model in a fixed order, handing each one its walk
+   * position.
+   *
+   * Mirrors eachMaterial() in loaders.js, and for the same reason: the list
+   * the user ticks and the mesh actually hidden both come from here, so the
+   * two cannot drift and blank out the wrong part. Reloading the same file
+   * rebuilds the same tree in the same order, which is what lets a hidden
+   * mesh survive a texture change.
+   *
+   * The axis guide is a child of the scene rather than of the model, so it is
+   * never enumerated and can never be switched off by mistake.
+   */
+  eachMesh(visit) {
+    if (!this.model) return;
+    let index = 0;
+    this.model.traverse((child) => {
+      if (child.isMesh) visit(child, index++);
+    });
+  }
+
+  /** One entry per mesh, for the picker to render. */
+  meshList() {
+    const out = [];
+    this.eachMesh((mesh, index) => {
+      const geometry = mesh.geometry;
+      const count = geometry?.index
+        ? geometry.index.count
+        : geometry?.attributes?.position?.count ?? 0;
+      out.push({
+        index,
+        name: mesh.name ?? '',
+        triangles: Math.floor(count / 3),
+        visible: mesh.visible !== false,
+      });
+    });
+    return out;
+  }
+
+  /**
+   * Hide the meshes whose walk positions are in `hidden`, show the rest.
+   *
+   * Framing deliberately does not follow. setModel() measures with traverse(),
+   * which visits invisible objects, so the model keeps the size and centre it
+   * was given — ticking boxes to compare two overlapping versions holds the
+   * camera still instead of jumping on every click.
+   */
+  setHiddenMeshes(hidden) {
+    const set = hidden instanceof Set ? hidden : new Set(hidden ?? []);
+    this.eachMesh((mesh, index) => { mesh.visible = !set.has(index); });
+  }
+
+  /**
    * Override materials with MeshPhongMaterial so the desktop app's lighting
    * controls keep their meaning (Phong *is* Blinn-Phong), and inject the rim
    * term three.js has no equivalent for.

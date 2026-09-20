@@ -10,6 +10,7 @@
 import { SpinScene, DEFAULT_SETTINGS } from './scene.js';
 import { loadModel, FILE_ACCEPT, SELF_CONTAINED, AUTO, NONE } from './loaders.js';
 import { baseName, stemOf, extOf, IMAGE_EXTENSIONS } from './archive.js';
+import { labelMeshes, toggleLabel, meshSummary } from './mesh-list.js';
 import { captureFrames, decodeFrames, storeSize } from './capture.js';
 import { loopSummary, FPS_LIMIT, frameAngles, frameDelaysMs,
          frameStarts, frameIndexAt } from './encoders/timing.js';
@@ -486,9 +487,20 @@ let appliedReplacements = [];
 let currentOptions = null;
 /** Replacer pairs as the picker currently shows them, trailing blank included. */
 let replacers = [];
+/**
+ * Walk positions of the meshes switched off in the picker.
+ *
+ * Kept here rather than in the choice, because visibility is a view property:
+ * nothing about the file changes, so a tick costs a re-render and not a
+ * reload. It survives a texture change — same file, same tree, same walk —
+ * and is cleared whenever the geometry underneath it could differ.
+ */
+let hiddenMeshes = new Set();
 
 async function handleFile(file, choice = null) {
   if (!file) return;
+  // A new file is a new tree; walk positions from the last one mean nothing.
+  if (!choice) hiddenMeshes = new Set();
   currentFile = file;
   currentChoice = choice;
   setBusy(`Loading ${file.name}…`);
@@ -496,6 +508,7 @@ async function handleFile(file, choice = null) {
     const { object, stats, report } = await loadModel(
       file, { creaseAngle: DEFAULT_SETTINGS.smoothAngle, choice });
     scene.setModel(object);
+    scene.setHiddenMeshes(hiddenMeshes);
     scene.applySettings(readSettings());
     // From a zip, the model inside names the export — "Patchwork chair" reads
     // better than "patchwork_chair_obj_0".
@@ -545,37 +558,35 @@ async function handleFile(file, choice = null) {
  */
 function showAdvanced(report) {
   const panel = $('advanced');
-  const options = report?.options;
-  if (!options) {
-    panel.hidden = true;
-    panel.open = false;
-    return;
-  }
-
+  // A plain file has no archive to ask about, but it can still hold a dozen
+  // stacked meshes — so the two halves of this panel are gated separately
+  // rather than the whole thing turning on an archive being present.
+  const options = report?.options ?? null;
   currentOptions = options;
 
   const rows = [
-    ['model', options.models, report.chosen?.model],
-    ['coords', options.coords, report.chosen?.coords],
-    ['texture', options.textures, report.chosen?.texture],
+    ['model', options?.models, report?.chosen?.model],
+    ['coords', options?.coords, report?.chosen?.coords],
+    ['texture', options?.textures, report?.chosen?.texture],
   ];
 
-  let asked = 0;
+  let picking = 0;
   for (const [key, list, selected] of rows) {
     const select = $(`opt-${key}`);
     const row = $(`row-${key}`);
-    fillSelect(select, list, selected);
+    fillSelect(select, list ?? [], selected);
     // One option is not a choice — except for the texture list, where the
     // single entry is only ever the "automatic" placeholder.
-    const worthAsking = list.length > 1;
+    const worthAsking = (list?.length ?? 0) > 1;
     row.hidden = !worthAsking;
-    if (worthAsking) asked++;
+    if (worthAsking) picking++;
   }
 
   // Swapping a material's texture only means anything while the material data
   // is the thing in charge; forcing one texture over the whole model already
   // overrides every binding there is.
-  const swapping = (report.chosen?.texture ?? AUTO) === AUTO
+  const swapping = !!options
+    && (report.chosen?.texture ?? AUTO) === AUTO
     && (options.replaceFrom?.length ?? 0) > 1
     && (options.replaceWith?.length ?? 0) > 1;
 
@@ -585,14 +596,84 @@ function showAdvanced(report) {
   if (swapping) {
     tidyReplacers();
     renderReplacers();
-    asked++;
   }
   $('replacers').hidden = !swapping;
 
-  panel.hidden = asked === 0;
+  const pruning = renderMeshList();
+
+  panel.hidden = picking === 0 && !swapping && !pruning;
   if (panel.hidden) panel.open = false;
-  $('advanced-note').textContent = panel.hidden ? ''
-    : (swapping ? `${ADVANCED_HINT} ${SWAP_HINT}` : ADVANCED_HINT);
+
+  const note = [];
+  if (picking) note.push(ADVANCED_HINT);
+  if (swapping) note.push(SWAP_HINT);
+  if (pruning) note.push(MESH_HINT);
+  $('advanced-note').textContent = panel.hidden ? '' : note.join(' ');
+}
+
+/* ----------------------------------------------------------- mesh picker */
+
+/**
+ * Fill the mesh checkboxes in. Returns whether the list is worth showing at
+ * all — one mesh is not a choice.
+ */
+function renderMeshList() {
+  const panel = $('meshes');
+  const host = $('mesh-list');
+  const list = scene.meshList();
+
+  // A walk position past the end of the current tree cannot refer to
+  // anything, so it is dropped rather than left to skew the counts.
+  for (const index of [...hiddenMeshes]) {
+    if (index >= list.length) hiddenMeshes.delete(index);
+  }
+
+  if (list.length < 2) {
+    host.replaceChildren();
+    panel.hidden = true;
+    panel.open = false;
+    return false;
+  }
+
+  host.replaceChildren();
+  for (const { index, label, title } of labelMeshes(list)) {
+    const row = document.createElement('label');
+    row.className = 'mesh-row';
+    // The name and triangle count the label no longer shows live here, where
+    // they cost no width.
+    row.title = title;
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = !hiddenMeshes.has(index);
+    box.dataset.mesh = String(index);
+    const caption = document.createElement('span');
+    caption.textContent = label;
+    row.append(box, caption);
+    host.append(row);
+  }
+  panel.hidden = false;
+  syncMeshChrome(list.length);
+  return true;
+}
+
+/** The summary's running count and what the one button offers to do. */
+function syncMeshChrome(total) {
+  $('meshes-summary').textContent = meshSummary(total, hiddenMeshes.size);
+  $('mesh-toggle-all').textContent = toggleLabel(total, hiddenMeshes.size);
+}
+
+/**
+ * Push the hidden set at the scene.
+ *
+ * Deliberately not applyAndPreview(): nothing about the timing, the frame
+ * count or the output size has moved, so the loop summary has nothing to say.
+ * The frame store does have to go — those frames have the mesh in them.
+ */
+function applyMeshVisibility() {
+  scene.setHiddenMeshes(hiddenMeshes);
+  syncMeshChrome(scene.meshList().length);
+  discardStore();
+  schedulePreview();
 }
 
 /* ------------------------------------------------------ texture replacers */
@@ -703,6 +784,9 @@ const ADVANCED_HINT =
 
 const SWAP_HINT = 'Fill in a replacer to swap one material\u2019s texture; another opens below it.';
 
+const MESH_HINT = 'Untick a mesh to leave it out \u2014 useful when a file holds '
+  + 'several versions of the same part stacked together.';
+
 function fillSelect(select, list, selected) {
   select.replaceChildren();
   for (const { value, label } of list) {
@@ -739,6 +823,10 @@ function reloadWithChoice(changed) {
     replacers = [];
     choice.replacements = [];
   }
+  // A different model is a different tree, so the walk positions no longer
+  // point at the same parts. Changing the material file or a texture leaves
+  // the geometry alone, and there the hidden set is worth keeping.
+  if (changed === 'model') hiddenMeshes = new Set();
 
   handleFile(currentFile, choice);
 }
@@ -746,6 +834,25 @@ function reloadWithChoice(changed) {
 for (const key of ['model', 'coords', 'texture']) {
   $(`opt-${key}`).addEventListener('change', () => reloadWithChoice(key));
 }
+
+// Delegated, because the checkboxes are rebuilt on every load.
+$('mesh-list').addEventListener('change', (e) => {
+  const box = e.target;
+  if (!(box instanceof HTMLInputElement) || box.dataset.mesh === undefined) return;
+  const index = +box.dataset.mesh;
+  if (box.checked) hiddenMeshes.delete(index);
+  else hiddenMeshes.add(index);
+  applyMeshVisibility();
+});
+
+$('mesh-toggle-all').addEventListener('click', () => {
+  const total = scene.meshList().length;
+  hiddenMeshes = hiddenMeshes.size >= total
+    ? new Set()
+    : new Set(Array.from({ length: total }, (_, i) => i));
+  renderMeshList();
+  applyMeshVisibility();
+});
 
 function discardStore() {
   store = null;

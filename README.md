@@ -115,7 +115,8 @@ small pure-JS unrar. Each of these is reported rather than passed off as success
 Some bundles are genuinely ambiguous — ten models, five material files, a
 hundred loose textures — and no amount of ranking makes that decision for you.
 An **Advanced** disclosure at the foot of the 3D model section, under the info
-line, lets you pick the combination by hand.
+line, lets you pick the combination by hand. It also holds the mesh list, so it
+opens for a plain file with several meshes and not only for a zip.
 
 A row appears only where there is a real question:
 
@@ -135,6 +136,34 @@ pre-selects the one that matches — pick `Adeleine_High.obj` and you get
 The **Texture** row is the blunt instrument, and sometimes the right one: a rip
 whose material data is wrong is often a single atlas the whole model was meant
 to share, and choosing that file by hand beats any amount of guessing.
+
+### Choosing which meshes to draw
+
+A ripped file often holds several versions of the same thing at once —
+alternate heads, an older body, a collision proxy — stacked on top of each
+other, and the mesh count in the info line is the first hint that something is
+in there twice. **Meshes** lists one checkbox per mesh, with a single button
+above it that hides or shows the lot.
+
+The boxes are labelled by position — `1`, `2`, `3` — and wrap into a grid, so
+twenty-one meshes are three lines you can take in at once. Names are not shown
+because a rip does not really have them: exporters leave them empty as often
+as not, and when one is there it is routinely a content hash
+(`7e64c2fb718121ebd157b6e15f6c0059-v7.00`) or the same string repeated on
+every mesh in the file. A column of those cannot be scanned, and clipping it
+short just makes every row identical. Hover a box and the tooltip gives you
+whatever the file does say, plus the triangle count.
+
+Unticking a mesh hides it from the preview and from every export — three.js
+simply does not draw it, so there is nothing for the encoders to get wrong.
+**Framing deliberately does not follow**: the model keeps the size and centre
+it was given, so flicking two checkboxes to compare overlapping versions holds
+the camera still instead of jumping on every click. If what remains sits small
+in the frame, Zoom is the control for that.
+
+The choice survives a texture or material-file change, since the geometry is
+identical and the meshes are keyed by their position in the file. Loading a
+different model, or a different file, starts over.
 
 ### Replacing textures
 

@@ -19,6 +19,7 @@ import { encodePng } from '../src/encoders/png.js';
 import { openArchive, AssetIndex, rankModels, cleanPath, normKey, extOf, stemOf,
          baseName, dirName, channelOf, nameAffinity } from '../src/archive.js';
 import { sanitiseMtl } from '../src/mtl-fix.js';
+import { labelMeshes, toggleLabel, meshSummary } from '../src/mesh-list.js';
 import { zipSync, strToU8 } from '../vendor/fflate.module.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -298,6 +299,52 @@ check('only the contradicting block loses its Tr',
   (mixed.match(/Tr/g) || []).length === 1 && /Tr 0/.test(mixed), JSON.stringify(mixed));
 check('keywords that merely start with d are safe',
   /disp bump\.png/.test(sanitiseMtl('newmtl a\nd 1\nTr 1\ndisp bump.png\n')));
+
+console.log('\nmesh list');
+// The visible label is the position and nothing else: a rip's mesh names are
+// blank, hashed or all identical, so a list of them cannot be scanned.
+const named = labelMeshes([
+  { index: 0, name: 'body', triangles: 1204 },
+  { index: 1, name: 'head_v2', triangles: 8 },
+]);
+check('the label is the position', named[0].label === '1' && named[1].label === '2');
+check('positions are 1-based',
+  labelMeshes([{ index: 6, name: '', triangles: 0 }])[0].label === '7');
+check('indices are carried through', named.map((m) => m.index).join() === '0,1');
+
+// Nothing is lost — it moves to the tooltip.
+check('the tooltip keeps the name', named[0].title === 'Mesh 1 · body · 1,204 triangles');
+check('the tooltip keeps the count', named[1].title === 'Mesh 2 · head_v2 · 8 triangles');
+check('one triangle is singular',
+  labelMeshes([{ index: 0, name: 'a', triangles: 1 }])[0].title === 'Mesh 1 · a · 1 triangle');
+check('a nameless mesh has no empty segment',
+  labelMeshes([{ index: 0, name: '', triangles: 5 }])[0].title === 'Mesh 1 · 5 triangles');
+check('whitespace counts as no name',
+  labelMeshes([{ index: 0, name: '   ', triangles: 5 }])[0].title === 'Mesh 1 · 5 triangles');
+check('a missing name field is tolerated',
+  labelMeshes([{ index: 0, triangles: 5 }])[0].title === 'Mesh 1 · 5 triangles');
+check('a missing triangle count is tolerated',
+  labelMeshes([{ index: 0, name: 'a' }])[0].title === 'Mesh 1 · a · 0 triangles');
+// Repeated names are the norm in a rip, and cannot collide now that the
+// label is positional.
+const dupes = labelMeshes([
+  { index: 0, name: 'Object_2', triangles: 10 },
+  { index: 1, name: 'Object_2', triangles: 20 },
+]);
+check('repeated names still get distinct labels', dupes[0].label !== dupes[1].label);
+check('repeated names keep their own tooltips', dupes[0].title !== dupes[1].title);
+check('an empty list is not an error', labelMeshes([]).length === 0);
+check('a non-list is not an error', labelMeshes(undefined).length === 0);
+
+// The button names what it will do, so it only offers "All on" with nothing left.
+check('the button offers to hide while anything shows', toggleLabel(4, 0) === 'All off');
+check('still offers to hide with one left', toggleLabel(4, 3) === 'All off');
+check('offers to show once all are hidden', toggleLabel(4, 4) === 'All on');
+check('an empty model does not offer to show', toggleLabel(0, 0) === 'All off');
+
+check('the summary counts what shows', meshSummary(14, 3) === 'Meshes — 11 of 14 shown');
+check('the summary handles none hidden', meshSummary(2, 0) === 'Meshes — 2 of 2 shown');
+check('the summary never goes negative', meshSummary(2, 5) === 'Meshes — 0 of 2 shown');
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

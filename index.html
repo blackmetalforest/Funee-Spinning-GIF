@@ -72,6 +72,16 @@
         <summary>Advanced</summary>
         <div class="row" id="row-model" hidden><label for="opt-model">Model</label>
           <select id="opt-model"></select></div>
+        <!--
+          One checkbox per mesh. Ripped models often carry several versions of
+          the same part stacked on top of each other, and this is the only way
+          to say which one to draw. Built in JS because the list is the model's.
+        -->
+        <details id="meshes" hidden>
+          <summary id="meshes-summary">Meshes</summary>
+          <button type="button" id="mesh-toggle-all">All off</button>
+          <div id="mesh-list"></div>
+        </details>
         <div class="row" id="row-coords" hidden><label for="opt-coords">Texture setup</label>
           <select id="opt-coords"></select></div>
         <div class="row" id="row-texture" hidden><label for="opt-texture">Texture</label>
