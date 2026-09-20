@@ -233,7 +233,20 @@ export class SpinScene {
     // into the measured radius and mis-scale every subsequent model.
     this.adjust.position.set(0, 0, 0);
     this.adjust.rotation.set(0, 0, 0);
-    this.adjust.updateMatrixWorld(true);
+
+    // The pivot above it has to stand down for the same reason, and it is the
+    // easier one to miss: Box3.setFromObject() reports a centre in *world*
+    // space, but that centre is written straight back to object.position,
+    // which is local. While the pivot carries the up-axis correction the two
+    // frames differ by 90 degrees, so the correction lands on the wrong axis
+    // and leaves the model off its own centre by as much as a full radius —
+    // far enough that the spin swings it through the near plane and clips it.
+    // Reachable by reloading a model (any Advanced choice does that) while Up
+    // axis is X or Z, and it outlived the setting, because the damage is baked
+    // into object.position rather than into the pivot.
+    const spin = this.pivot.quaternion.clone();
+    this.pivot.quaternion.identity();
+    this.pivot.updateMatrixWorld(true);
 
     // Centre on the bounding-box centre, then scale by the *true* bounding
     // sphere radius. Box3.getBoundingSphere() returns the sphere around the
@@ -247,6 +260,9 @@ export class SpinScene {
     const radius = maxRadiusFromPoint(object, centre) || 1;
     object.position.copy(centre).multiplyScalar(-1 / radius);
     object.scale.setScalar(1 / radius);
+
+    this.pivot.quaternion.copy(spin);
+    this.pivot.updateMatrixWorld(true);
 
     this.applyMaterials();
     this.applySettings(this.settings);
