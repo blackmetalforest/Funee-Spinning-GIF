@@ -10,15 +10,30 @@ Everything runs in your browser. Models are never uploaded, it's a static Webapp
 **[Open the FSGM Webapp →](https://blackmetalforest.github.io/Funee-Spinning-GIF/)**
 
 ## Where to get 3D models
-**[Katamari Game Models](https://katamari.andrew-boylan.com/)** - the original website that inspired this FSGM Webapp. Tip: change the Address → We Love Katamari
+**[Katamari Damacy Game Models](https://katamari.andrew-boylan.com/)** - the original website that inspired this FSGM Webapp.
+Tip: change the Address → We Love Katamari
 
-**[Sketchfab](sketchfab.com)** - about 50% are free to download. choose the .glb version.
+**[Sketchfab](https://sketchfab.com/feed)** - about 50% are free to download. choose the .glb version.
 
-**[The Models Resource](https://models.spriters-resource.com/)** - Video Game Asset Rips. Some of these models to load correctly in FSGM
+**[The Models Resource](https://models.spriters-resource.com/)** - Video Game Asset Rips. Some models struggle to load correctly in FSGM
 
 **[Meshy.ai](https://www.meshy.ai/discover)** - AI Generated Models. Tip: Use a tool to download the .glb like **[this Browser Extension](https://github.com/efebaykaraa/meshy_downloader)** or **[this Tampermonkey Script](https://github.com/youssef02/meshy2glb)**
 
-## What it does
+.
+
+.
+
+.
+
+.
+
+.
+
+
+
+## THE FOLLOWING IS LLM GENERATED
+
+### What it does
 
 - Loads 11 model formats, including textured GLB and FBX
 - Opens **.zip bundles** — finds the model inside, textures and all, even
