@@ -126,7 +126,20 @@ async function parseModel(ext, buffer, ctx) {
     case 'glb':
     case 'gltf': {
       const loader = new GLTFLoader(manager);
-      const draco = new DRACOLoader(manager);
+      /*
+       * Deliberately *not* given our manager.
+       *
+       * DRACOLoader fetches its decoder through a FileLoader built on the
+       * manager it was handed, and FileLoader runs every URL through
+       * manager.resolveURL(). Hand it the manager that answers the model's
+       * references and the decoder request goes through the same redirect —
+       * the archive resolver looks for "draco_wasm_wrapper.js" inside the
+       * zip, does not find it, and hands back the missing-texture pixel,
+       * which is then parsed as JavaScript. The decoder is part of this app,
+       * not part of the file being opened, so it loads on the default
+       * manager and reaches the disk untouched.
+       */
+      const draco = new DRACOLoader();
       // Vendored locally so the app still works offline and on Pages.
       draco.setDecoderPath('./vendor/three/addons/libs/draco/gltf/');
       loader.setDRACOLoader(draco);
@@ -166,6 +179,33 @@ async function parseModel(ext, buffer, ctx) {
 }
 
 /**
+ * Answer every reference a lone model makes with a blank pixel.
+ *
+ * A .gltf, .dae, .fbx or .3ds opened on its own can name any URL it likes
+ * for a texture, and three.js will go and fetch it. Whoever wrote that file
+ * then learns the address, the user agent and the moment it was opened — a
+ * tracking pixel wearing a 3D model. Relative paths are no better: they
+ * resolve against whatever is hosting the app and 404 there.
+ *
+ * Archives have been immune to this from the start, because their resolver
+ * answers out of the zip and refuses anything with a scheme. This is the
+ * same guarantee for the files that do not come in a zip, and it is what
+ * makes "everything runs in your browser" true rather than nearly true.
+ */
+function localOnlyManager(blocked) {
+  const manager = new THREE.LoadingManager();
+  manager.setURLModifier((url) => {
+    if (/^(data|blob):/i.test(url)) return url;
+    const name = baseName(url) || url;
+    if (!blocked.includes(name)) blocked.push(name);
+    return MISSING_PIXEL;
+  });
+  // A .tga that the file embedded as a data: URI still needs its decoder.
+  manager.addHandler(/\.tga(#|$|\?)/i, new TGALoader(manager));
+  return manager;
+}
+
+/**
  * Load a model from a File/Blob. Returns { object, stats, report }.
  * `creaseAngle` matches the desktop app's --smooth flag.
  */
@@ -174,13 +214,15 @@ export async function loadModel(file, { creaseAngle = 40, choice = null } = {}) 
   if (ext === 'zip') return loadArchive(file, { creaseAngle, choice });
 
   const buffer = await file.arrayBuffer();
-  const result = await parseModel(ext, buffer, { creaseAngle });
+  const blocked = [];
+  const manager = localOnlyManager(blocked);
+  const result = await parseModel(ext, buffer, { creaseAngle, manager });
   const object = normalise(result, creaseAngle);
   if (!hasMesh(object)) {
     throw new Error('That file contains no meshes to render');
   }
   repairMaterials(object);
-  return { object, stats: describe(object, ext), report: null };
+  return { object, stats: { ...describe(object, ext), blocked }, report: null };
 }
 
 /* ------------------------------------------------------------- archives */

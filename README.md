@@ -225,6 +225,36 @@ the blob URL it was served on, which works for OBJ/MTL, Collada, FBX and 3DS.
 glTF is the exception: it decodes to an `ImageBitmap`, which carries no URL, so
 those entries show the material name alone. Replacing still works there.
 
+## Nothing goes out
+
+After the page has loaded, the app makes no network requests at all. Every
+dependency is vendored, so there is no CDN, no analytics, no fonts fetched at
+runtime — and no model or image you open ever leaves the machine.
+
+That needs enforcing rather than merely intending, because a model file can
+ask for the network on your behalf. A `.gltf`, `.dae`, `.fbx` or `.3ds` can
+name an absolute URL for a texture, and three.js will go and fetch it — at
+which point whoever wrote that file learns your address, your user agent and
+the moment you opened it. A tracking pixel wearing a 3D model.
+
+Archives were always immune: their resolver answers out of the zip and
+refuses anything carrying a scheme. Lone files were not, and used to fetch
+whatever they asked for. They now go through a loading manager that answers
+every external reference with a blank pixel, and the info line says so —
+`1 external reference blocked`, with the filenames on hover — so a model that
+arrives untextured explains itself instead of just looking broken.
+
+One exception, and it has to be: the Draco decoder. `DRACOLoader` fetches its
+decoder through a `FileLoader` built on whatever loading manager it is handed,
+and `FileLoader` runs every URL through `manager.resolveURL()`. Given the
+manager that answers the model's references, the decoder request goes through
+the same redirect — the archive resolver hunts for `draco_wasm_wrapper.js`
+inside the zip, fails, and returns the missing-texture pixel, which is then
+parsed as JavaScript. The decoder belongs to the app rather than to the file
+being opened, so it loads on the default manager and reaches the disk
+untouched. This was quietly broken for Draco-compressed glTF in a zip before
+the block existed.
+
 ## What gets repaired on the way in
 
 Ripped game models arrive with a small set of recurring defects. Each of these

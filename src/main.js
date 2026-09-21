@@ -546,6 +546,20 @@ function escapeHtml(text) {
 }
 
 /**
+ * Say so when a lone file asked for something off the network.
+ *
+ * Without this the block is invisible: the model simply arrives untextured
+ * and the file looks broken, when in fact it was pointing at a server.
+ */
+function blockedNote(stats) {
+  const blocked = stats?.blocked ?? [];
+  if (!blocked.length) return '';
+  const what = blocked.length === 1 ? '1 external reference' : `${blocked.length} external references`;
+  return ` · <span class="caution" title="${escapeHtml(blocked.join(', '))}">`
+    + `${what} blocked</span>`;
+}
+
+/**
  * The second line of the model info, describing what was found in a zip.
  *
  * Worth its own line because a zip hides its contents: which model of the
@@ -630,7 +644,8 @@ async function handleFile(file, choice = null) {
     if (!stats.textured && !report && !SELF_CONTAINED.has(stats.ext)) {
       bits.push('no textures found — .' + stats.ext + ' often stores them separately');
     }
-    $('model-info').innerHTML = escapeHtml(bits.join(' · ')) + archiveNote(report, stats);
+    $('model-info').innerHTML =
+      escapeHtml(bits.join(' · ')) + blockedNote(stats) + archiveNote(report, stats);
     appliedReplacements = report?.replacements ?? [];
     showAdvanced(report);
 
