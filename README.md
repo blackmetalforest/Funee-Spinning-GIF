@@ -5,16 +5,18 @@
 Drop in a 3D model, get a perfectly looping spin animation. Export it as a GIF,
 animated WebP, APNG, or a ZIP of frames.
 
-Everything runs in your browser. Models are never uploaded, there's no account,
-no build step and no backend — it's a static site.
+Everything runs in your browser. Models are never uploaded, it's a static Webapp.
 
 **[Open the FSGM Webapp →](https://blackmetalforest.github.io/Funee-Spinning-GIF/)**
 
 ## Where to get 3D models
 **[Katamari Game Models](https://katamari.andrew-boylan.com/)** - the original website that inspired this FSGM Webapp. Tip: change the Address → We Love Katamari
-**[The Models Resource](https://models.spriters-resource.com/)** - Video Game Rips. It's hard to some of these models to load correctly in FSGM
-**[Meshy.ai](https://www.meshy.ai/discover)** - AI Generated Models. Don't pay them, use a tool to extract the .glb like **[this](https://github.com/efebaykaraa/meshy_downloader)** or this
 
+**[Sketchfab](sketchfab.com)** - about 50% are free to download. choose the .glb version.
+
+**[The Models Resource](https://models.spriters-resource.com/)** - Video Game Asset Rips. Some of these models to load correctly in FSGM
+
+**[Meshy.ai](https://www.meshy.ai/discover)** - AI Generated Models. Tip: Use a tool to download the .glb like **[this Browser Extension](https://github.com/efebaykaraa/meshy_downloader)** or **[this Tampermonkey Script](https://github.com/youssef02/meshy2glb)**
 
 ## What it does
 
