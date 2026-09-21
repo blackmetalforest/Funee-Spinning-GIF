@@ -517,6 +517,54 @@ check('the last bottom line does not move',
 check('the bottom block is pushed upward', bot2[0].y < bot1[0].y);
 check('the bottom block stays on the image', bot2[0].y > 0);
 
+/*
+ * Text is placed by its ink, not by its em box, so that every font ends up
+ * with the same clear space. Placing by the box balanced top against bottom
+ * but left each face on a different margin — Arimo 21px where Anton got 18 —
+ * because Anton's capitals nearly fill their box and Arimo's do not.
+ */
+const inked = (ascent, descent) => {
+  const c = stub();
+  c.measureText = function (t) {
+    return { width: t.length * 0.82 * (parseFloat(this.font) || 10),
+             actualBoundingBoxAscent: ascent, actualBoundingBoxDescent: descent };
+  };
+  return c;
+};
+const PAD = 480 * (18 / 480);            // 18px on a 480px image
+
+// Two invented faces whose ink sits very differently in the box. Both must
+// come out on exactly the same margin.
+const tight = layoutText(inked(-2, 46), { top: 'A', bottom: 'C' },
+  { width: 480, height: 480, family: 'X' });
+const loose = layoutText(inked(-9, 33), { top: 'A', bottom: 'C' },
+  { width: 480, height: 480, family: 'X' });
+check('a tight face starts its ink at the margin',
+  Math.abs((tight.lines[0].y + 2) - PAD) < 1e-6, String(tight.lines[0].y + 2));
+check('a loose face starts its ink at the same margin',
+  Math.abs((loose.lines[0].y + 9) - PAD) < 1e-6, String(loose.lines[0].y + 9));
+check('both end their ink at the same margin',
+  Math.abs((tight.lines[1].y + 46) - (480 - PAD)) < 1e-6
+  && Math.abs((loose.lines[1].y + 33) - (480 - PAD)) < 1e-6);
+check('18px at 480', Math.abs(PAD - 18) < 1e-9);
+
+// The middle block centres its ink, not its box.
+const mid = layoutText(inked(-9, 33), { middle: 'A' },
+  { width: 480, height: 480, family: 'X' }).lines[0];
+check('the middle block centres its ink',
+  Math.abs(((mid.y + 9) + (mid.y + 33)) / 2 - 240) < 1e-6);
+
+// A multi-line bottom block still ends on the margin.
+const tall = layoutText(inked(-9, 33), { bottom: 'A'.repeat(40) },
+  { width: 480, height: 480, family: 'X' }).lines;
+check('a wrapped bottom block still ends on the margin',
+  Math.abs((tall[tall.length - 1].y + 33) - (480 - PAD)) < 1e-6);
+
+// Without ink extents, fall back to treating the box as the ink.
+const plain = layoutText(stub(), { top: 'A' }, box);
+check('without metrics the box is used as-is',
+  Math.abs(plain.lines[0].y - PAD) < 1e-9, String(plain.lines[0].y));
+
 const top1 = layoutText(stub(), { top: 'A' }, box).lines;
 const top2 = layoutText(stub(), { top: 'A'.repeat(40) }, box).lines;
 check('the first top line does not move', top1[0].y === top2[0].y);
@@ -556,9 +604,13 @@ check('every face file exists',
 check('every face limits its unicode-range', faces.every((f) => f.range));
 check('every face blocks rather than swapping', faces.every((f) => f.display));
 
-const included = (/<optgroup label="Included">([\s\S]*?)<\/optgroup>/.exec(html) || [])[1] || '';
-const firstFamilies = [...included.matchAll(/<option value="((?:'[^']*'|[^",])+)/g)]
+const menu = (/<select id="text-font">([\s\S]*?)<\/select>/.exec(html) || [])[1] || '';
+const firstFamilies = [...menu.matchAll(/<option value="((?:'[^']*'|[^",])+)/g)]
   .map((m) => m[1].trim().replace(/^'|'$/g, ''));
+// Only bundled faces are offered now, so every option must be one.
+check('the menu offers nothing but bundled faces',
+  firstFamilies.every((f) => faces.some((x) => x.family === f)),
+  firstFamilies.join(' | '));
 check('five fonts are offered', firstFamilies.length === 5, firstFamilies.join(' | '));
 check('each offered font has a @font-face',
   firstFamilies.every((f) => faces.some((face) => face.family === f)),

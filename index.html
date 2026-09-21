@@ -238,31 +238,19 @@
         <div class="row row-text"><label for="text-bottom">Bottom</label>
           <textarea id="text-bottom" rows="3" maxlength="5000" placeholder="—"></textarea></div>
         <div class="row"><label for="text-font">Font</label>
-          <select id="text-font">
           <!--
-            Bundled first, because these are the ones guaranteed to be there.
-            Each stack still names its system counterpart underneath, so a
-            font file that fails to load lands on something the right shape
-            rather than on a default sans.
+            The five bundled faces, and only those. Naming a system font here
+            offered something most machines do not have — Impact is on no
+            Linux or Android box — so the menu promised a look it could not
+            deliver. Each stack still falls back to its system counterpart if
+            the font file itself fails to load.
           -->
-          <optgroup label="Included">
+          <select id="text-font">
             <option value="Anton, Impact, 'Arial Narrow Bold', sans-serif" selected>Anton — like Impact</option>
             <option value="Oswald, 'Futura Condensed ExtraBold', 'Arial Narrow', sans-serif">Oswald — condensed</option>
             <option value="'Comic Neue', 'Comic Sans MS', cursive">Comic Neue — like Comic Sans</option>
             <option value="Arimo, Arial, Helvetica, sans-serif">Arimo — like Arial</option>
             <option value="Tinos, 'Times New Roman', Times, serif">Tinos — like Times</option>
-          </optgroup>
-          <!-- Only render if the viewer's machine happens to have them. -->
-          <optgroup label="From your system">
-            <option value="Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif">Impact</option>
-            <option value="'Arial Black', 'Arial Bold', Gadget, sans-serif">Arial Black</option>
-            <option value="Arial, Helvetica, sans-serif">Arial</option>
-            <option value="'Comic Sans MS', 'Comic Sans', cursive">Comic Sans MS</option>
-            <option value="'Courier New', Courier, monospace">Courier New</option>
-            <option value="Georgia, serif">Georgia</option>
-            <option value="'Times New Roman', Times, serif">Times New Roman</option>
-            <option value="Verdana, Geneva, sans-serif">Verdana</option>
-          </optgroup>
           </select></div>
         <div class="row"><label for="text-stroke">Stroke weight</label>
           <input type="range" id="text-stroke" min="0" max="20" step="0.1" value="5">

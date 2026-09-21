@@ -26,9 +26,17 @@
  */
 export const MS_ACROSS = 10;
 
-/** Fraction of the width kept clear at each side, and of the height top and bottom. */
+/** Fraction of the width kept clear at each side. */
 const SIDE_MARGIN = 0.04;
-const EDGE_MARGIN = 0.03;
+
+/**
+ * Clear space above and below the text, as a fraction of the height — 18px
+ * on a 480px image.
+ *
+ * This is the real gap to the ink, not a margin the font then eats into. Every
+ * font lands on the same figure; see inkOffsets().
+ */
+const EDGE_MARGIN = 18 / 480;
 
 /**
  * The share of a span the text is allowed to use. Shared by the line box and
@@ -65,15 +73,51 @@ export function fontBasis(height) {
   return height * SPAN;
 }
 
+/**
+ * The default font size on a 480px-tall image, in pixels — about 38.5, using
+ * Impact's M advance of roughly 0.82em. Stroke weight is quoted against this
+ * so that "5" means five pixels there, which is where the default came from.
+ */
+const STROKE_REF = fontBasis(480) / (MS_ACROSS * 0.82);
+
 /** Line spacing, as a multiple of the font size. Tight, the way a caption is. */
 const LINE_HEIGHT = 1.12;
 
 /**
- * The default font size on a 480px-wide image, in pixels — about 38.5, using
- * Impact's M advance of roughly 0.82em. Stroke weight is quoted against this
- * so that "2" means two pixels there, which is where the default came from.
+ * Where a font's capitals actually sit inside the box they are placed in.
+ *
+ * Lines are positioned by their em box, but ink does not fill that box, and
+ * how far short it falls is a property of the font. Placing by the box means
+ * every face ends up with a different amount of clear space: balanced top
+ * against bottom, but Arimo sat 3px further from the edge than Anton, because
+ * Anton's capitals nearly fill their box while Arimo's leave room for
+ * descenders that all-caps text never uses.
+ *
+ * So nothing is placed by the box. This reports how far below the placement
+ * line the ink starts and ends, and layoutText() positions the *ink*, which
+ * puts every font on the same margin.
+ *
+ * The probe is flat-topped, flat-bottomed capitals: no O to overshoot, no
+ * descender. That keeps the figure constant for a font rather than shifting
+ * as the wording changes — a caption is nearly always caps, and text that
+ * does carry a descender will hang slightly below the line instead of
+ * dragging the whole block up as you type.
  */
-const STROKE_REF = fontBasis(480) / (MS_ACROSS * 0.82);
+function inkOffsets(ctx, size) {
+  const previous = ctx.textBaseline;
+  ctx.textBaseline = 'top';
+  const probe = ctx.measureText('MHEX');
+  ctx.textBaseline = previous;
+
+  const ascent = probe?.actualBoundingBoxAscent;
+  const descent = probe?.actualBoundingBoxDescent;
+  // No ink extents to be had: assume the ink fills the box, which is the
+  // old behaviour and is never worse than refusing to draw.
+  if (!Number.isFinite(ascent) || !Number.isFinite(descent)) {
+    return { top: 0, bottom: size };
+  }
+  return { top: -ascent, bottom: descent };
+}
 
 /**
  * The font size, derived from the image **height**.
@@ -194,7 +238,8 @@ export function layoutText(ctx, { top, middle, bottom }, opts) {
 
   const maxWidth = usableWidth(width);
   const lineStep = size * LINE_HEIGHT;
-  const edge = height * EDGE_MARGIN;
+  const pad = height * EDGE_MARGIN;
+  const ink = inkOffsets(ctx, size);
   const centre = width / 2;
 
   const blocks = [
@@ -208,11 +253,14 @@ export function layoutText(ctx, { top, middle, bottom }, opts) {
     const lines = wrapLines(ctx, text, maxWidth);
     if (!lines.length) continue;
 
-    const blockHeight = (lines.length - 1) * lineStep + size;
+    // Everything is expressed against the ink, so `pad` is the clear space
+    // you actually see whichever font is in use.
+    const lastLine = (lines.length - 1) * lineStep;
+    const inkHeight = lastLine + ink.bottom - ink.top;
     let y0;
-    if (where === 'top') y0 = edge;
-    else if (where === 'middle') y0 = (height - blockHeight) / 2;
-    else y0 = height - edge - blockHeight;
+    if (where === 'top') y0 = pad - ink.top;
+    else if (where === 'middle') y0 = (height - inkHeight) / 2 - ink.top;
+    else y0 = height - pad - ink.bottom - lastLine;
 
     lines.forEach((line, i) => placed.push({ text: line, x: centre, y: y0 + i * lineStep }));
   }

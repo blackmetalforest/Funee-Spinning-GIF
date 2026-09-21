@@ -411,6 +411,39 @@ text grows:
 | **Center** | stays centred on the image, so a second line pushes the first up by half a line |
 | **Bottom** | grows *upward*, so extra lines make room for themselves instead of walking off the image |
 
+Text is positioned by its **ink**, not by its em box, and that is the whole
+reason the three blocks sit where they do. A line's em box is taller than the
+letters in it, and by a different amount in every font — capitals ride high in
+the box while the space reserved for descenders goes unused. Place by the box
+and an all-caps caption reads high, by a different margin per font.
+
+Placing by the box and then correcting for it got halfway: balanced top
+against bottom within a font, but each face still ended up on its own margin,
+because the correction differs from face to face by more than four to one.
+
+| Font | ink offset at 480px |
+| --- | --- |
+| Anton | 8.9px |
+| Oswald | 6.4px |
+| Comic Neue | 3.0px |
+| Arimo | 2.1px |
+| Tinos | 3.5px |
+
+So nothing is placed by the box now. A probe of flat capitals — `MHEX`, no O
+to overshoot and no descender — reports where the ink actually starts and
+ends via `actualBoundingBoxAscent` and `actualBoundingBoxDescent`, and the
+top block's ink is put on the margin, the bottom block's ink on the margin
+from the foot, and the middle block's ink on the centre of the image.
+
+The result is **18px above and below on a 480px image, in every font**:
+measured at 17–18 across all five, with every centre block landing on the
+middle. It scales with the image, 36px at 960.
+
+The probe is capitals rather than the actual text on purpose. Measuring the
+real wording would pin any string exactly, but the block would then jump as
+you typed, a `g` or a `y` shifting everything. A caption is nearly always
+caps; text that does carry a descender hangs slightly below the line instead.
+
 ### Sized to the image, not to the pixel
 
 Nothing about the caption is measured in pixels, so the same settings give the
@@ -463,9 +496,12 @@ with nothing to measure or keep in sync.
 
 ### Fonts
 
-The Font list has two groups. **Included** are five faces bundled with the
-app, so they are there on every machine. **From your system** are the familiar
-names, which render only if the viewer happens to have them.
+The Font list offers five faces, all bundled with the app, so they are there
+on every machine. System fonts used to be listed underneath and are not any
+more: naming Impact in a menu promises a look the machine may well not have —
+it is on no stock Linux or Android install — and a menu that quietly delivers
+something else is worse than a shorter menu. Each stack still falls back to
+its system counterpart if the font file itself fails to load.
 
 | Included | stands in for | size |
 | --- | --- | --- |
