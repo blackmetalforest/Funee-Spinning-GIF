@@ -20,6 +20,8 @@ export const UP_AXES = ['Y', 'Z', 'X'];
 // Hoisted: setAngle() runs once per frame of the live preview, and allocating a
 // vector per call is pure garbage for the collector to chase.
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
+/* The clear colour. Only its alpha of 0 matters — see render(). */
+const BLACK = new THREE.Color(0x000000);
 
 export const DEFAULT_SETTINGS = {
   width: 480,
@@ -524,10 +526,27 @@ export class SpinScene {
     this.pivot.rotateOnWorldAxis(WORLD_UP, total);
   }
 
+  /**
+   * Draw the model, and only the model.
+   *
+   * The clear is always fully transparent, whatever `settings.background` and
+   * `settings.transparent` say. The renderer used to paint the background
+   * itself by clearing to the chosen colour, which made the background the
+   * bottom-most thing in the image and left nothing that could ever be put
+   * underneath it — the caption's "Behind" mode would have been buried by an
+   * opaque background with no way out.
+   *
+   * So the background is a layer now, painted by whoever is composing the
+   * frame: a div under the canvas in the preview, a fillRect in
+   * makeResolver(). `settings.transparent` still decides *whether* that layer
+   * is painted; it just no longer decides it here.
+   *
+   * Compositing the model over the colour afterwards is the same source-over
+   * operation the GL clear was doing, one layer later, so the result is
+   * unchanged down to the antialiased edge.
+   */
   render() {
-    const s = this.settings;
-    const colour = new THREE.Color(s.background);
-    this.renderer.setClearColor(colour, s.transparent ? 0 : 1);
+    this.renderer.setClearColor(BLACK, 0);
     this.renderer.render(this.scene, this.camera);
   }
 

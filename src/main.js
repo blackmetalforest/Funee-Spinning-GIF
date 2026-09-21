@@ -148,6 +148,17 @@ function readCaption() {
 }
 
 /**
+ * The background colour to paint under the render, or null to leave it clear.
+ *
+ * The renderer no longer paints its own background (see SpinScene.render), so
+ * this is the single answer to "is there a colour down there", asked by the
+ * preview's backdrop div and by the capture's fillRect alike.
+ */
+function readBackdrop() {
+  return $('transparent').checked ? null : $('background').value;
+}
+
+/**
  * The bundled families, as CSS needs to hear them.
  *
  * Kept in step with the @font-face rules in style.css and the "Included"
@@ -179,13 +190,13 @@ async function waitForFont(family) {
 }
 
 /**
- * Paint the caption over the preview.
+ * Lay out and paint the preview's three layers.
  *
- * A separate 2D canvas stacked on the WebGL one, because you cannot draw
- * text into a WebGL context. It is sized to the render's own drawing buffer
- * rather than to the output size, so both canvases have identical intrinsic
- * dimensions and the grid lays them out on top of each other whatever the
- * stage is doing.
+ * The overlay is a separate 2D canvas because you cannot draw text into a
+ * WebGL context; the backdrop is a div because a flat colour needs nothing
+ * more. What this function owns is the *arrangement*: it is the preview's
+ * half of the same decision makeResolver() makes for the export, and the two
+ * have to agree or what you see is not what you save.
  */
 function drawPreviewCaption() {
   const overlay = $('overlay');
@@ -206,6 +217,13 @@ function drawPreviewCaption() {
     overlay.width = w;
     overlay.height = h;
   }
+
+  // The colour layer. Empty string lets the stage's checkerboard through,
+  // which is how a transparent background has always read here.
+  $('backdrop').style.backgroundColor = readBackdrop() ?? '';
+  // What CSS scales, so the three layers cannot drift apart.
+  $('frame').style.aspectRatio = `${w} / ${h}`;
+
   const ctx = overlay.getContext('2d');
   ctx.clearRect(0, 0, overlay.width, overlay.height);
   overlay.hidden = canvas.classList.contains('empty');
@@ -1349,7 +1367,7 @@ $('reset-render').addEventListener('click', () => {
 // Preview-only guides: deliberately not part of readSettings(), so toggling
 // them neither re-renders nor throws away an existing frame store.
 $('show-border').addEventListener('change', () => {
-  canvas.classList.toggle('show-border', $('show-border').checked);
+  $('frame').classList.toggle('show-border', $('show-border').checked);
 });
 
 $('preview').addEventListener('change', () => {

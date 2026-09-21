@@ -144,18 +144,47 @@ html, body {
   overflow: hidden;
 }
 
-/* The canvas is sized by the renderer; CSS only scales it to fit the stage. */
-#canvas, #overlay {
+/*
+ * The exported image, in layers.
+ *
+ * #frame is the picture, and the only thing CSS scales; its aspect-ratio is
+ * set in JS so max-width and max-height can fit the whole thing into the
+ * stage. The three layers stack in one cell and each fills it, so they line
+ * up with nothing to measure or keep in sync.
+ */
+#frame {
+  display: grid;
   max-width: 100%;
   max-height: 100%;
-  /* Required for the max-* rules above to bite. As a grid item the canvas gets
+  /* Required for the max-* rules above to bite. As a grid item #frame gets
      min-height/min-width: auto, i.e. its automatic minimum size — the full
      render resolution — which outranks max-height and lets it overflow a stage
      shorter than the render. Zeroing both lets it actually scale down. */
   min-width: 0;
   min-height: 0;
-  object-fit: contain;
+}
+/* Nothing is left of the image, so the empty stage shows the dropzone alone. */
+#stage:has(#canvas.empty) #frame { display: none; }
+
+#backdrop, #canvas, #overlay {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
   display: block;
+}
+
+/*
+ * The background colour, as a layer of its own. The renderer used to paint it
+ * by clearing to it; now it sits under everything, so there is somewhere for
+ * a caption to go *beneath* the model. Left unset when Transparent is ticked,
+ * so the stage's checkerboard shows through.
+ */
+#backdrop { pointer-events: none; }
+
+#canvas {
+  object-fit: contain;
   /* Drag must orbit the model, not scroll the page behind it. */
   touch-action: none;
   cursor: grab;
@@ -163,22 +192,15 @@ html, body {
 #canvas.dragging { cursor: grabbing; }
 #canvas.empty { display: none; }
 
-/*
- * The caption sits on the render, not beside it. Both are grid items in the
- * stage's single cell, and both are given the same intrinsic size in JS, so
- * the same max-width/height rules resolve to the same box and they line up
- * without any measuring. Clicks fall through to the canvas underneath, which
- * is what orbits the model.
- */
-#canvas, #overlay { grid-area: 1 / 1; }
+/* Clicks fall through to the canvas underneath, which orbits the model. */
 #overlay { pointer-events: none; }
 #overlay[hidden] { display: none; }
 
 /*
  * Marks the exact edge of the exported image.
  *
- * With a transparent background the render shows the stage checkerboard, and
- * so does the stage *outside* the canvas — so there is otherwise no visual cue
+ * With a transparent background the image shows the stage checkerboard, and
+ * so does the stage *outside* the frame — so there is otherwise no visual cue
  * where the image ends and anything overhanging gets cropped.
  *
  * Two rings rather than one: a black line alone is near-invisible against the
@@ -187,7 +209,7 @@ html, body {
  * reads on any background. Both are drawn with box-shadow so they sit outside
  * the element and cannot shift the layout or overlap the image.
  */
-#canvas.show-border {
+#frame.show-border {
   box-shadow: 0 0 0 1px #000, 0 0 0 2px rgba(255, 255, 255, 0.5);
 }
 

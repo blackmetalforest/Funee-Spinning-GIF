@@ -21,17 +21,32 @@ import { encodePng } from './encoders/png.js';
 import { drawText } from './overlay-text.js';
 
 /**
- * Downsample the supersampled drawing buffer to the true output size.
- * The canvas and its context are reused across frames — allocating a fresh
- * one per frame is measurably slower.
+ * Build the composer that turns one rendered frame into one output image.
+ *
+ * Bottom to top: the background, the downsampled render, the caption.
+ *
+ * The background is painted here rather than by the renderer. The GL clear is
+ * always transparent now (see SpinScene.render), so an opaque background is a
+ * fillRect underneath everything — which is what will let a caption be drawn
+ * *under* the model later, and what stops an opaque background being the one
+ * thing nothing can ever sit behind.
+ *
+ * The canvas and its context are reused across frames; allocating a fresh one
+ * per frame is measurably slower.
  */
-function makeResolver(width, height, caption) {
+function makeResolver(width, height, caption, background) {
   const out = new OffscreenCanvas(width, height);
   const ctx = out.getContext('2d', { willReadFrequently: true });
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   return (source) => {
     ctx.clearRect(0, 0, width, height);
+    // Only when the user asked for one: left clear otherwise, so the alpha
+    // channel still tells the exporters the truth about what is see-through.
+    if (background) {
+      ctx.fillStyle = background;
+      ctx.fillRect(0, 0, width, height);
+    }
     ctx.drawImage(source, 0, 0, width, height);
     // The caption goes on *after* the downsample, at the true output size, so
     // its edges stay sharp instead of being softened along with the render.
@@ -54,7 +69,9 @@ function makeResolver(width, height, caption) {
 export async function captureFrames(scene, spin, onProgress, caption = null) {
   const { width, height } = scene.settings;
   const angles = frameAngles(spin.frames, spin.clockwise);
-  const resolve = makeResolver(width, height, caption);
+  // The renderer no longer paints the background, so the composer does.
+  const background = scene.settings.transparent ? null : scene.settings.background;
+  const resolve = makeResolver(width, height, caption, background);
   const blobs = [];
 
   // The centre-axis guide is a preview aid and must never reach the output.

@@ -586,6 +586,26 @@ formats are built from that store only when you hit Save. This matters:
 - **Lossless intermediates.** Because the store is PNG, GIF quantisation sees
   exact pixels and APNG export needs no re-encoding at all.
 
+### The background is a layer, not a clear colour
+
+`SpinScene.render()` always clears fully transparent, whatever Background and
+Transparent are set to. The colour is painted *underneath* the render by
+whoever composes the frame — a `fillRect` in `makeResolver()`, a `#backdrop`
+div under the canvases in the preview. `settings.transparent` still decides
+whether that layer is painted; it just no longer decides it inside the
+renderer.
+
+It used to clear to the colour, which made the background the bottom-most
+thing in the image and left nothing that could ever be placed under it. Making
+it a layer is what allows anything to be drawn *behind* the model.
+
+The change is invisible. Compositing the model over the colour with
+source-over in the 2D canvas is the same operation the GL clear was doing, one
+layer later — measured against the old build on the same model and settings,
+**38 channels out of 921,600 differ, every one by ±1**, and every one on the
+model's antialiased silhouette, where the two paths round a partly covered
+pixel differently. Renders are otherwise bit-identical run to run.
+
 ### Two things are deliberately hand-written
 
 **The PNG encoder** (`src/encoders/png.js`). Chrome's built-in canvas PNG

@@ -21,13 +21,21 @@
   <!-- Render view. Desktop: right column. Mobile: sticky top row. -->
   <section id="view" aria-label="Render preview">
     <div id="stage">
-      <canvas id="canvas"></canvas>
       <!--
-        The caption, drawn on a 2D canvas over the WebGL one. Preview only in
-        the sense that this element is: the same drawing is baked into every
-        exported frame by captureFrames().
+        The exported image, in layers: the background colour, the render, and
+        the caption over it. #frame is sized to the image so all three scale
+        together, and so the backdrop covers the picture rather than the whole
+        stage around it.
+
+        The caption is a 2D canvas because you cannot draw text into a WebGL
+        context, and it is "preview" only in the sense that this element is:
+        captureFrames() bakes the very same drawing into every exported frame.
       -->
-      <canvas id="overlay"></canvas>
+      <div id="frame">
+        <div id="backdrop"></div>
+        <canvas id="canvas"></canvas>
+        <canvas id="overlay"></canvas>
+      </div>
       <div id="dropzone">
         <div class="drop-inner">
           <strong>Drop a 3D model or .zip here</strong>
