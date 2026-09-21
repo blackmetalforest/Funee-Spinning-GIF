@@ -646,6 +646,18 @@ vendor/               three.js r186, Draco, gifenc, fflate (all pinned)
 content/              wordmarks, the theme clip, and a small test model
 ```
 
+## Licence
+
+This project's own work is under the **BSD Zero Clause License** — see
+[LICENSE](LICENSE). It grants everything and asks for nothing: no attribution,
+no notice, no conditions. Take it, change it, ship it, sell it, say nothing
+about where it came from.
+
+That covers everything outside `vendor/`. What is inside `vendor/` belongs to
+other people and, permissive as it all is, **every piece of it requires its
+notice be kept** — see [THIRD-PARTY.md](THIRD-PARTY.md), which lists each
+component and points at its licence text.
+
 ## Credits
 
 Rendering by [three.js](https://threejs.org). GIF quantisation by
