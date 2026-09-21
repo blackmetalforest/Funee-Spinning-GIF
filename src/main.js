@@ -11,6 +11,7 @@ import { SpinScene, DEFAULT_SETTINGS } from './scene.js';
 import { loadModel, FILE_ACCEPT, SELF_CONTAINED, AUTO, NONE } from './loaders.js';
 import { baseName, stemOf, extOf, IMAGE_EXTENSIONS } from './archive.js';
 import { labelMeshes, toggleLabel, meshSummary } from './mesh-list.js';
+import { drawText, isBlank } from './overlay-text.js';
 import { captureFrames, decodeFrames, storeSize } from './capture.js';
 import { loopSummary, FPS_LIMIT, frameAngles, frameDelaysMs,
          frameStarts, frameIndexAt } from './encoders/timing.js';
@@ -33,7 +34,8 @@ let rendering = false;
 
 const RANGE_IDS = ['elevation', 'start', 'fov', 'zoom', 'speed', 'fps',
   'ambient', 'key', 'fill', 'rim', 'specular', 'shininess',
-  'pos-x', 'pos-y', 'pos-z', 'pitch', 'yaw', 'roll'];
+  'pos-x', 'pos-y', 'pos-z', 'pitch', 'yaw', 'roll',
+  'text-stroke', 'text-size'];
 
 // Position sliders change the render, so they must also drop the frame store.
 const POSITION_IDS = ['pos-x', 'pos-y', 'pos-z', 'pitch', 'yaw', 'roll'];
@@ -120,6 +122,67 @@ function clampInt(value, lo, hi, fallback) {
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fallback;
 }
 
+/* ---------------------------------------------------------------- text */
+
+/**
+ * The caption as the controls currently describe it.
+ *
+ * Psycho mode is not built, so it draws nothing at all rather than quietly
+ * behaving like Classic — a mode that silently did something else would be
+ * worse than one that plainly does nothing.
+ */
+function readCaption() {
+  if ($('text-mode').value !== 'classic') return null;
+  const text = {
+    top: $('text-top').value,
+    middle: $('text-middle').value,
+    bottom: $('text-bottom').value,
+  };
+  if (isBlank(text)) return null;
+  return {
+    text,
+    family: $('text-font').value,
+    weight: +$('text-stroke').value,
+    scale: +$('text-size').value / 100,
+  };
+}
+
+/**
+ * Paint the caption over the preview.
+ *
+ * A separate 2D canvas stacked on the WebGL one, because you cannot draw
+ * text into a WebGL context. It is sized to the render's own drawing buffer
+ * rather than to the output size, so both canvases have identical intrinsic
+ * dimensions and the grid lays them out on top of each other whatever the
+ * stage is doing.
+ */
+function drawPreviewCaption() {
+  const overlay = $('overlay');
+  /*
+   * Sized from the render canvas, deliberately — not from the settings.
+   *
+   * The renderer is not resized until the next animation frame. Sizing the
+   * overlay from the settings instead made it jump to the new size at once
+   * while the render underneath stayed at the old one, and since the grid
+   * lays the two out by their intrinsic sizes, the caption sat visibly wrong
+   * against the model until something else redrew it. Following the canvas
+   * means the two always change together, one frame later but in step.
+   */
+  const source = scene.canvas;
+  const w = Math.max(1, source.width);
+  const h = Math.max(1, source.height);
+  if (overlay.width !== w || overlay.height !== h) {
+    overlay.width = w;
+    overlay.height = h;
+  }
+  const ctx = overlay.getContext('2d');
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+  overlay.hidden = canvas.classList.contains('empty');
+  const caption = readCaption();
+  if (!caption || overlay.hidden) return;
+  drawText(ctx, caption.text, { ...caption, width: overlay.width, height: overlay.height });
+}
+
 /* ------------------------------------------------------------- display */
 
 /**
@@ -151,6 +214,8 @@ function syncOutputs() {
     $(`${id}-out`).textContent = trim(+$(id).value);
   }
   $('shininess-out').textContent = $('shininess').value;
+  $('text-stroke-out').textContent = (+$('text-stroke').value).toFixed(1);
+  $('text-size-out').textContent = `${$('text-size').value}%`;
   for (const id of ['pos-x', 'pos-y', 'pos-z']) {
     $(`${id}-out`).textContent = trim(+$(id).value);
   }
@@ -425,6 +490,11 @@ function schedulePreview() {
       scene.setAngle(0);
     }
     scene.render();
+    // In lockstep with the resize above. The overlay is resized immediately
+    // on a settings change but the renderer's canvas only here, so between
+    // the two they lay out at different sizes and the caption sits visibly
+    // wrong against the render until something else redraws it.
+    drawPreviewCaption();
   });
 }
 
@@ -432,6 +502,7 @@ function applyAndPreview() {
   syncOutputs();
   updateLoopInfo();
   updateViewSize();
+  drawPreviewCaption();
   if (playing) resyncCycle();   // frames/speed/direction may have moved
   schedulePreview();
 }
@@ -953,6 +1024,30 @@ for (const type of ['pointerup', 'pointercancel']) {
 }
 // A scrolled-away or hidden list must not keep blinking.
 $('mesh-list').addEventListener('scroll', stopMeshFlash);
+
+/* ----------------------------------------------------------------- text */
+
+/*
+ * Every caption control invalidates the frame store: the text is drawn into
+ * the frames themselves, so an existing render no longer matches the
+ * settings. The sliders are in RANGE_IDS and already redraw the preview, so
+ * here they only have to drop the store.
+ */
+for (const id of ['text-top', 'text-middle', 'text-bottom', 'text-font',
+  'text-stroke', 'text-size', 'text-mode']) {
+  $(id).addEventListener('input', () => {
+    discardStore();
+    drawPreviewCaption();
+  });
+}
+
+$('text-mode').addEventListener('change', () => {
+  const classic = $('text-mode').value === 'classic';
+  $('text-classic').hidden = !classic;
+  $('text-psycho').hidden = classic;
+  discardStore();
+  drawPreviewCaption();
+});
 window.addEventListener('blur', stopMeshFlash);
 
 $('mesh-toggle-all').addEventListener('click', () => {
@@ -1275,7 +1370,7 @@ $('render').addEventListener('click', async () => {
       setProgress(done, total);
       $('store-info').textContent = `Rendering frame ${done} of ${total}…`;
       return !cancelRequested;
-    });
+    }, readCaption());
 
     if (!result) {
       $('store-info').textContent = 'Cancelled.';

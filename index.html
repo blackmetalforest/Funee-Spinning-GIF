@@ -22,6 +22,12 @@
   <section id="view" aria-label="Render preview">
     <div id="stage">
       <canvas id="canvas"></canvas>
+      <!--
+        The caption, drawn on a 2D canvas over the WebGL one. Preview only in
+        the sense that this element is: the same drawing is baked into every
+        exported frame by captureFrames().
+      -->
+      <canvas id="overlay"></canvas>
       <div id="dropzone">
         <div class="drop-inner">
           <strong>Drop a 3D model or .zip here</strong>
@@ -214,6 +220,47 @@
         <input type="range" id="shininess" min="1" max="200" step="1" value="40">
         <output for="shininess" id="shininess-out">40</output></div>
       <div class="row actions"><button id="reset-render">Reset to defaults</button></div>
+    </section>
+
+    <section class="group">
+      <h2>Text</h2>
+      <div class="row"><label for="text-mode">Mode</label>
+        <select id="text-mode">
+          <option value="classic" selected>Classic mode</option>
+          <option value="psycho">Psycho mode</option>
+        </select></div>
+
+      <div id="text-classic">
+        <div class="row row-text"><label for="text-top">Top</label>
+          <textarea id="text-top" rows="3" maxlength="5000" placeholder="—"></textarea></div>
+        <div class="row row-text"><label for="text-middle">Center</label>
+          <textarea id="text-middle" rows="3" maxlength="5000" placeholder="—"></textarea></div>
+        <div class="row row-text"><label for="text-bottom">Bottom</label>
+          <textarea id="text-bottom" rows="3" maxlength="5000" placeholder="—"></textarea></div>
+        <div class="row"><label for="text-font">Font</label>
+          <select id="text-font">
+          <option value="Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif" selected>Impact</option>
+          <option value="'Arial Black', 'Arial Bold', Gadget, sans-serif">Arial Black</option>
+          <option value="Arial, Helvetica, sans-serif">Arial</option>
+          <option value="'Comic Sans MS', 'Comic Sans', cursive">Comic Sans MS</option>
+          <option value="'Courier New', Courier, monospace">Courier New</option>
+          <option value="Georgia, serif">Georgia</option>
+          <option value="'Times New Roman', Times, serif">Times New Roman</option>
+          <option value="Verdana, Geneva, sans-serif">Verdana</option>
+          </select></div>
+        <div class="row"><label for="text-stroke">Stroke weight</label>
+          <input type="range" id="text-stroke" min="0" max="20" step="0.1" value="5">
+          <output for="text-stroke" id="text-stroke-out">5.0</output></div>
+        <div class="row"><label for="text-size">Size</label>
+          <input type="range" id="text-size" min="30" max="300" step="1" value="100">
+          <output for="text-size" id="text-size-out">100%</output></div>
+        <p class="muted small">Letter size follows the image <em>height</em>, so
+          a wider image fits more on a line rather than growing the text.
+          Centred, wraps on its own; press Enter to break a line early.</p>
+      </div>
+
+      <p id="text-psycho" class="muted small" hidden>Psycho mode is not built
+        yet — nothing is drawn. Switch back to Classic mode.</p>
     </section>
 
     <section class="group">

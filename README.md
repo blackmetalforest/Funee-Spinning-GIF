@@ -359,6 +359,81 @@ behind by whatever was missed. A single rendering loop serves both the spin and
 the centre-axis fade, and draws only when something actually changed — at 1 fps
 that is one draw per second, and a 1-frame still draws once and then stops.
 
+## Text
+
+A **Text** section lays a caption over the animation: one box for the top of
+the image, one for the centre, one for the bottom, then Font, Stroke weight
+and Size under them. Text is always centred, and wraps on its own when a line
+runs out of room — or press **Enter** to break a line early, exactly where you
+want it. Two Enters leave a blank line rather than being swallowed.
+
+Each box holds three lines at a glance and up to **5,000 characters**. A
+caption that long runs off the image, which is allowed; lines that fall
+entirely outside are skipped rather than handed to the rasteriser once per
+frame.
+
+The three blocks anchor differently, which is what makes them behave when the
+text grows:
+
+| | |
+| --- | --- |
+| **Top** | grows downward; the first line stays put |
+| **Center** | stays centred on the image, so a second line pushes the first up by half a line |
+| **Bottom** | grows *upward*, so extra lines make room for themselves instead of walking off the image |
+
+### Sized to the image, not to the pixel
+
+Nothing about the caption is measured in pixels, so the same settings give the
+same picture at 200x200, 480x480 and 1000x1000 — only the resolution changes.
+
+Letter size follows the image **height**, which is the counterintuitive half
+and the right one. Reading the width would tie how big a letter is to how wide
+the frame is, so widening 480x480 to 1000x480 to fit a longer caption would
+blow the text up instead and leave you no better off. Reading the height means
+the size holds and the extra width does what you wanted: more characters on
+the line. A 480x480 and a 1000x480 render are pixel-identical in the caption.
+
+The size itself is set so that **about 10 capital Ms span a square image** —
+on a square one that is literally how many fit, on a wider one the letters
+stay that size and more of them fit. Stroke weight scales the same way, quoted
+so the default of 5 means five pixels on a 480-tall image. **Stroke 0 draws no
+outline at all.**
+
+The M count is *measured* from the font rather than assumed, because the fonts
+on offer differ by more than 2x in how wide an M is — Impact is far narrower
+than Arial Black at the same point size, and one fixed pixel size would be
+wrong for one of them. The same measurement sizes the stroke, so the outline
+stays in proportion when the Size control moves rather than swallowing small
+text and hairlining big text.
+
+Two things here went wrong before they went right, and both are the same
+shape — a measurement taken against the wrong span:
+
+- The font was first sized to the **full** width while wrapping happened
+  inside the side margins, so the promised count wrapped one character early.
+  Both now measure the same span.
+- Stroke 0 still drew a hairline. `ctx.lineWidth = 0` is *ignored* — the
+  canvas spec requires a value greater than zero — so the context silently
+  kept the 1 it already had, and the guard that read `ctx.lineWidth` back saw
+  1 and stroked anyway. The width is now held in a local and never read off
+  the context.
+
+### Where it is drawn
+
+The caption is painted in `makeResolver()` in [src/capture.js](src/capture.js),
+onto each frame *after* the supersampled render has been downsampled — at the
+true output size, so its edges stay sharp instead of being softened along with
+the model. Because it goes into the frame store rather than into a save step,
+one render feeds a GIF, a WebP, an APNG and a ZIP that all agree.
+
+The preview draws the same thing onto a second canvas stacked over the WebGL
+one, since text cannot be drawn into a WebGL context. Both canvases are given
+the same intrinsic size, so the stage's grid lays them on top of each other
+with nothing to measure or keep in sync.
+
+**Psycho mode** is in the dropdown but not built. It draws nothing at all
+rather than quietly behaving like Classic mode.
+
 ## Output formats
 
 | Format | Colour | Transparency | Timing | Notes |

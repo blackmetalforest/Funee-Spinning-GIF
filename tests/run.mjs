@@ -20,6 +20,8 @@ import { openArchive, AssetIndex, rankModels, cleanPath, normKey, extOf, stemOf,
          baseName, dirName, channelOf, nameAffinity } from '../src/archive.js';
 import { sanitiseMtl } from '../src/mtl-fix.js';
 import { labelMeshes, toggleLabel, meshSummary } from '../src/mesh-list.js';
+import { fontPx, strokePx, wrapLines, layoutText, drawText, isBlank, MS_ACROSS,
+         usableWidth, fontBasis } from '../src/overlay-text.js';
 import { zipSync, strToU8 } from '../vendor/fflate.module.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -345,6 +347,185 @@ check('an empty model does not offer to show', toggleLabel(0, 0) === 'All off');
 check('the summary counts what shows', meshSummary(14, 3) === 'Meshes — 11 of 14 shown');
 check('the summary handles none hidden', meshSummary(2, 0) === 'Meshes — 2 of 2 shown');
 check('the summary never goes negative', meshSummary(2, 5) === 'Meshes — 0 of 2 shown');
+
+console.log('\noverlay text');
+/*
+ * A stub context: every glyph is 0.82em wide, which is roughly Impact's M.
+ * Layout is all measureText, so this is the whole dependency.
+ */
+const stub = () => ({
+  font: '10px x',
+  measureText(t) { return { width: t.length * 0.82 * (parseFloat(this.font) || 10) }; },
+});
+
+/*
+ * The promise the feature is built on, stated the way a user would check it:
+ * MS_ACROSS capital Ms go on one line, one more does not, at any image size.
+ * Asserting the line count rather than an intermediate ratio is what caught
+ * the font being sized to the full width while wrapping used the margins —
+ * which quietly wrapped the promised 14 at 13.
+ */
+const linesFor = (w, n) => {
+  const ctx = stub();
+  const size = fontPx(ctx, 'Impact', w);
+  ctx.font = `${size}px Impact`;
+  return wrapLines(ctx, 'M'.repeat(n), usableWidth(w)).length;
+};
+for (const w of [200, 480, 1000]) {
+  check(`${MS_ACROSS} Ms fit one line on a ${w}px image`, linesFor(w, MS_ACROSS) === 1);
+  check(`one more wraps on a ${w}px image`, linesFor(w, MS_ACROSS + 1) === 2);
+}
+check('font size is linear in width',
+  Math.abs(fontPx(stub(), 'Impact', 1000) / fontPx(stub(), 'Impact', 500) - 2) < 1e-9);
+check('the size control scales it',
+  Math.abs(fontPx(stub(), 'Impact', 480, 2) / fontPx(stub(), 'Impact', 480) - 2) < 1e-9);
+
+// Stroke: 1 unit is 1px on a 480-tall image, and grows with the image.
+check('stroke 5 is 5px at 480',
+  Math.abs(strokePx(5, fontPx(stub(), 'Impact', 480)) - 5) < 0.02);
+check('stroke doubles with the image',
+  Math.abs(strokePx(5, fontPx(stub(), 'Impact', 960)) - 10) < 0.05);
+check('stroke follows the size control',
+  Math.abs(strokePx(5, fontPx(stub(), 'Impact', 480, 2)) - 10) < 0.05);
+check('stroke never goes negative', strokePx(-5, 40) === 0);
+check('stroke zero is zero', strokePx(0, 40) === 0);
+
+/*
+ * Zero has to mean *no outline at all*, and asserting the number is not
+ * enough. Assigning 0 to ctx.lineWidth is ignored — the spec requires a
+ * value greater than zero — so the context silently keeps the 1 it already
+ * had. Gating the draw on ctx.lineWidth therefore read 1 back and stroked a
+ * hairline that no setting could turn off. This watches the calls instead.
+ */
+const recorder = () => {
+  const calls = [];
+  let lineWidth = 1;
+  const rec = {
+    calls,
+    font: '10px x',
+    measureText(t) { return { width: t.length * 0.82 * (parseFloat(this.font) || 10) }; },
+    save() {}, restore() {},
+    fillText() { calls.push('fill'); },
+    strokeText() { calls.push(`stroke@${lineWidth}`); },
+  };
+  // The point of the stub: a real context *ignores* a lineWidth that is not
+  // finite and greater than zero, keeping whatever it had. A plain property
+  // would happily store 0 and the test would pass against the very bug it
+  // exists to catch.
+  Object.defineProperty(rec, 'lineWidth', {
+    get: () => lineWidth,
+    set: (v) => { if (Number.isFinite(v) && v > 0) lineWidth = v; },
+  });
+  return rec;
+};
+const drawWith = (weight) => {
+  const rec = recorder();
+  drawText(rec, { top: 'HI' }, { width: 480, height: 480, family: 'Impact', weight });
+  return rec.calls;
+};
+check('a stroke weight draws an outline', drawWith(5).some((c) => c.startsWith('stroke')));
+check('zero draws no outline at all', !drawWith(0).some((c) => c.startsWith('stroke')),
+  drawWith(0).join());
+check('zero still draws the letters', drawWith(0).includes('fill'));
+
+// Wrapping
+const ctx = stub();
+ctx.font = '10px x';                       // every char 8.2px wide
+check('short text stays on one line', wrapLines(ctx, 'AB', 100).length === 1);
+check('long text wraps at a space', wrapLines(ctx, 'AAAAA BBBBB CCCCC', 100).length > 1);
+check('wrapping breaks on whitespace',
+  wrapLines(ctx, 'AAAAA BBBBB CCCCC', 100).every((l) => !l.startsWith(' ')));
+check('no line exceeds the width',
+  wrapLines(ctx, 'AAAAA BBBBB CCCCC DDDDD', 100)
+    .every((l) => ctx.measureText(l).width <= 100));
+// One shouted unspaced word is the common case, not a corner.
+const broken = wrapLines(ctx, 'A'.repeat(40), 100);
+check('an over-long word is broken up', broken.length > 1);
+check('the broken pieces all fit',
+  broken.every((l) => ctx.measureText(l).width <= 100));
+check('breaking loses no characters', broken.join('') === 'A'.repeat(40));
+check('blank text yields no lines', wrapLines(ctx, '   ', 100).length === 0);
+check('null text yields no lines', wrapLines(ctx, null, 100).length === 0);
+
+// Enter breaks a line early — the same thing wrapping does, done by hand.
+check('a newline starts a new line', wrapLines(ctx, 'AA\nBB', 100).length === 2);
+check('the break lands where it was typed',
+  wrapLines(ctx, 'AA\nBB', 100).join('|') === 'AA|BB');
+check('several newlines all count', wrapLines(ctx, 'A\nB\nC\nD', 100).length === 4);
+check('a typed break survives alongside wrapping',
+  wrapLines(ctx, 'AAAAA BBBBB CCCCC\nDD', 100).at(-1) === 'DD');
+// Enter twice is a deliberate gap, not nothing.
+check('an empty line is kept', wrapLines(ctx, 'A\n\nB', 100).join('|') === 'A||B');
+check('trailing newlines are trimmed off', wrapLines(ctx, 'A\n\n', 100).length === 1);
+
+// The default size is ten Ms, which is what 140% of the original fourteen was.
+check('the default is ten Ms across', MS_ACROSS === 10);
+check('ten Ms fit, eleven do not',
+  linesFor(480, 10) === 1 && linesFor(480, 11) === 2);
+
+/*
+ * Letter size follows the HEIGHT. Widening the frame must not grow the text —
+ * it must let more of it onto the line, which is the whole point of widening
+ * a frame to fit a longer caption.
+ */
+const sizeAt = (w, h) => layoutText(stub(), { top: 'M' }, { width: w, height: h, family: 'Impact' }).size;
+check('a wider image keeps the same letter size',
+  Math.abs(sizeAt(1000, 480) - sizeAt(480, 480)) < 1e-9,
+  `${sizeAt(1000, 480)} vs ${sizeAt(480, 480)}`);
+check('a taller image grows the letters',
+  Math.abs(sizeAt(480, 960) / sizeAt(480, 480) - 2) < 1e-9);
+check('width no longer changes the size at all',
+  Math.abs(sizeAt(200, 480) - sizeAt(2000, 480)) < 1e-9);
+check('fontBasis reads the height', Math.abs(fontBasis(480) - 480 * 0.92) < 1e-9);
+
+// ...and the extra width is spent on characters.
+const fitsOn = (w, h) => {
+  const ctx = stub();
+  const size = fontPx(ctx, 'Impact', h);
+  ctx.font = `${size}px Impact`;
+  let n = 0;
+  while (wrapLines(ctx, 'M'.repeat(n + 1), usableWidth(w)).length === 1) n++;
+  return n;
+};
+check('a square image fits ten', fitsOn(480, 480) === 10);
+check('twice the width fits about twice as many',
+  fitsOn(960, 480) >= 20 && fitsOn(960, 480) <= 21, String(fitsOn(960, 480)));
+
+// Placement
+const box = { width: 480, height: 480, family: 'Impact' };
+const one = layoutText(stub(), { top: 'A', middle: 'B', bottom: 'C' }, box);
+check('all three blocks are placed', one.lines.length === 3);
+check('every line is centred horizontally', one.lines.every((l) => l.x === 240));
+check('top sits above middle sits above bottom',
+  one.lines[0].y < one.lines[1].y && one.lines[1].y < one.lines[2].y);
+
+// The middle block recentres as it grows; the bottom block grows upward.
+const mid1 = layoutText(stub(), { middle: 'A' }, box).lines;
+const mid2 = layoutText(stub(), { middle: 'A'.repeat(40) }, box).lines;
+const centreOf = (ls, size) => (ls[0].y + ls[ls.length - 1].y + size) / 2;
+const s1 = layoutText(stub(), { middle: 'A' }, box).size;
+check('a second middle line appears', mid2.length > mid1.length);
+check('the middle block stays centred',
+  Math.abs(centreOf(mid1, s1) - centreOf(mid2, s1)) < 0.01, 
+  `${centreOf(mid1, s1)} vs ${centreOf(mid2, s1)}`);
+check('the middle block grew upward', mid2[0].y < mid1[0].y);
+
+const bot1 = layoutText(stub(), { bottom: 'A' }, box).lines;
+const bot2 = layoutText(stub(), { bottom: 'A'.repeat(40) }, box).lines;
+check('the last bottom line does not move',
+  Math.abs(bot1[bot1.length - 1].y - bot2[bot2.length - 1].y) < 0.01);
+check('the bottom block is pushed upward', bot2[0].y < bot1[0].y);
+check('the bottom block stays on the image', bot2[0].y > 0);
+
+const top1 = layoutText(stub(), { top: 'A' }, box).lines;
+const top2 = layoutText(stub(), { top: 'A'.repeat(40) }, box).lines;
+check('the first top line does not move', top1[0].y === top2[0].y);
+
+check('an empty caption places nothing',
+  layoutText(stub(), { top: '', middle: '', bottom: '' }, box).lines.length === 0);
+check('isBlank spots an empty caption', isBlank({ top: ' ', middle: '', bottom: null }));
+check('isBlank spots a filled one', !isBlank({ bottom: 'x' }));
+check('isBlank tolerates nothing at all', isBlank());
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

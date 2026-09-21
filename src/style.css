@@ -71,7 +71,7 @@ html, body {
 }
 
 /* The canvas is sized by the renderer; CSS only scales it to fit the stage. */
-#canvas {
+#canvas, #overlay {
   max-width: 100%;
   max-height: 100%;
   /* Required for the max-* rules above to bite. As a grid item the canvas gets
@@ -88,6 +88,17 @@ html, body {
 }
 #canvas.dragging { cursor: grabbing; }
 #canvas.empty { display: none; }
+
+/*
+ * The caption sits on the render, not beside it. Both are grid items in the
+ * stage's single cell, and both are given the same intrinsic size in JS, so
+ * the same max-width/height rules resolve to the same box and they line up
+ * without any measuring. Clicks fall through to the canvas underneath, which
+ * is what orbits the model.
+ */
+#canvas, #overlay { grid-area: 1 / 1; }
+#overlay { pointer-events: none; }
+#overlay[hidden] { display: none; }
 
 /*
  * Marks the exact edge of the exported image.
@@ -270,7 +281,7 @@ input[type="range"] {
      horizontal drags still change the value. */
   touch-action: pan-y;
 }
-input[type="number"], input[type="text"], select {
+input[type="number"], input[type="text"], textarea, select {
   width: 100%;
   background: #15171c;
   color: var(--text);
@@ -385,6 +396,21 @@ footer { padding: 0 4px 8px; }
   cursor: pointer;
 }
 .mesh-row input { flex: none; margin: 0; }
+
+/*
+ * The caption boxes are three lines tall so a whole caption is visible while
+ * it is being written, and the label sits at the top of that box rather than
+ * floating in the middle of it.
+ */
+.row-text { align-items: start; }
+.row-text label { padding-top: 6px; }
+#text-classic textarea {
+  resize: vertical;
+  min-height: calc(3em + 12px);
+  font-family: inherit;
+  line-height: 1.35;
+}
+#text-classic[hidden], #text-psycho[hidden] { display: none; }
 
 #replacers[hidden] { display: none; }
 /*

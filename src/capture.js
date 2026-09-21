@@ -18,13 +18,14 @@
 
 import { frameAngles } from './encoders/timing.js';
 import { encodePng } from './encoders/png.js';
+import { drawText } from './overlay-text.js';
 
 /**
  * Downsample the supersampled drawing buffer to the true output size.
  * The canvas and its context are reused across frames — allocating a fresh
  * one per frame is measurably slower.
  */
-function makeResolver(width, height) {
+function makeResolver(width, height, caption) {
   const out = new OffscreenCanvas(width, height);
   const ctx = out.getContext('2d', { willReadFrequently: true });
   ctx.imageSmoothingEnabled = true;
@@ -32,6 +33,11 @@ function makeResolver(width, height) {
   return (source) => {
     ctx.clearRect(0, 0, width, height);
     ctx.drawImage(source, 0, 0, width, height);
+    // The caption goes on *after* the downsample, at the true output size, so
+    // its edges stay sharp instead of being softened along with the render.
+    // Here rather than at save time because it belongs to the frame: one
+    // render then feeds a GIF, a WebP and an APNG that all agree.
+    if (caption) drawText(ctx, caption.text, { ...caption, width, height });
     return ctx.getImageData(0, 0, width, height);
   };
 }
@@ -42,12 +48,13 @@ function makeResolver(width, height) {
  * @param {SpinScene} scene
  * @param {{frames:number, clockwise:boolean}} spin
  * @param {(done:number,total:number)=>boolean} onProgress return false to cancel
+ * @param {{text:object, family:string, weight:number, scale:number}} [caption]
  * @returns {Promise<{blobs: Blob[], width: number, height: number} | null>}
  */
-export async function captureFrames(scene, spin, onProgress) {
+export async function captureFrames(scene, spin, onProgress, caption = null) {
   const { width, height } = scene.settings;
   const angles = frameAngles(spin.frames, spin.clockwise);
-  const resolve = makeResolver(width, height);
+  const resolve = makeResolver(width, height, caption);
   const blobs = [];
 
   // The centre-axis guide is a preview aid and must never reach the output.
