@@ -7,7 +7,7 @@
  *   node tests/run.mjs
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -526,6 +526,61 @@ check('an empty caption places nothing',
 check('isBlank spots an empty caption', isBlank({ top: ' ', middle: '', bottom: null }));
 check('isBlank spots a filled one', !isBlank({ bottom: 'x' }));
 check('isBlank tolerates nothing at all', isBlank());
+
+console.log('\nbundled fonts');
+/*
+ * The three places a bundled font is named — the @font-face rules, the
+ * "Included" options, and BUNDLED_FONTS in main.js — have to agree exactly.
+ * Nothing shouts when they do not: the browser simply falls back, and since
+ * the caption is sized by measuring the font, it quietly comes out at a
+ * different size and wraps somewhere else. That is the bug this catches.
+ */
+const root = join(here, '..');
+const css = readFileSync(join(root, 'src/style.css'), 'utf8');
+const html = readFileSync(join(root, 'index.html'), 'utf8');
+const mainJs = readFileSync(join(root, 'src/main.js'), 'utf8');
+
+const faces = [...css.matchAll(/@font-face\s*\{([^}]*)\}/g)].map((m) => ({
+  family: (/font-family:\s*'([^']+)'/.exec(m[1]) || [])[1],
+  file: (/url\('([^']+)'\)/.exec(m[1]) || [])[1],
+  range: /unicode-range:/.test(m[1]),
+  display: /font-display:\s*block/.test(m[1]),
+}));
+check('five faces are declared', faces.length === 5, `got ${faces.length}`);
+check('every face names a family', faces.every((f) => f.family));
+check('every face file exists',
+  faces.every((f) => f.file && existsSync(join(root, 'src', f.file))),
+  faces.filter((f) => !f.file || !existsSync(join(root, 'src', f.file))).map((f) => f.file).join());
+// Without unicode-range the browser assumes the subset covers everything and
+// draws missing-glyph boxes instead of falling through to the next font.
+check('every face limits its unicode-range', faces.every((f) => f.range));
+check('every face blocks rather than swapping', faces.every((f) => f.display));
+
+const included = (/<optgroup label="Included">([\s\S]*?)<\/optgroup>/.exec(html) || [])[1] || '';
+const firstFamilies = [...included.matchAll(/<option value="((?:'[^']*'|[^",])+)/g)]
+  .map((m) => m[1].trim().replace(/^'|'$/g, ''));
+check('five fonts are offered', firstFamilies.length === 5, firstFamilies.join(' | '));
+check('each offered font has a @font-face',
+  firstFamilies.every((f) => faces.some((face) => face.family === f)),
+  firstFamilies.filter((f) => !faces.some((x) => x.family === f)).join());
+
+const declared = (/const BUNDLED_FONTS = \[([^\]]*)\]/.exec(mainJs) || [])[1] || '';
+const preloaded = [...declared.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+check('main.js preloads five', preloaded.length === 5, preloaded.join());
+check('main.js preloads exactly what is declared',
+  preloaded.slice().sort().join() === faces.map((f) => f.family).sort().join(),
+  `${preloaded.sort().join()} vs ${faces.map((f) => f.family).sort().join()}`);
+
+// Shipping a font without its licence is the thing this whole change exists
+// to avoid, so it is worth a test of its own.
+for (const f of faces) {
+  const name = f.file.split('/').pop().replace('-latin.woff2', '');
+  check(`${name} ships a licence`,
+    readdirSync(join(root, 'vendor/fonts')).some((x) => /^OFL-.*\.txt$/.test(x)
+      && readFileSync(join(root, 'vendor/fonts', x), 'utf8')
+        .toLowerCase().includes(f.family.toLowerCase().replace(' ', ''))
+      || readdirSync(join(root, 'vendor/fonts')).includes(`OFL-${f.family.replace(' ', '')}.txt`)));
+}
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

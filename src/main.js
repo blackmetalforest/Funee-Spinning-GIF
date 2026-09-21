@@ -148,6 +148,37 @@ function readCaption() {
 }
 
 /**
+ * The bundled families, as CSS needs to hear them.
+ *
+ * Kept in step with the @font-face rules in style.css and the "Included"
+ * options in index.html — a test asserts all three agree, because a typo
+ * here is invisible: the browser would quietly fall back and the caption
+ * would change size with nothing to show for it.
+ */
+const BUNDLED_FONTS = ['Anton', 'Oswald', 'Comic Neue', 'Arimo', 'Tinos'];
+
+/**
+ * Make sure a family is actually loaded before anything measures it.
+ *
+ * This is the whole reason bundling fonts is more than dropping files in a
+ * folder. measureText and fillText fall back to a default face, silently, if
+ * the font has not arrived — and because fontPx() *measures* the M to size
+ * the caption, a fallback does not merely look wrong, it picks a different
+ * size and wraps in different places. Without this the first render after a
+ * reload can disagree with every render after it.
+ */
+async function waitForFont(family) {
+  if (!document.fonts?.load) return;
+  try {
+    await document.fonts.load(`100px ${family}`);
+  } catch {
+    // An unloadable family is not worth failing a render over: the stack
+    // falls back, the caption is measured from whatever answered, and the
+    // layout is still self-consistent.
+  }
+}
+
+/**
  * Paint the caption over the preview.
  *
  * A separate 2D canvas stacked on the WebGL one, because you cannot draw
@@ -743,6 +774,18 @@ function syncMeshChrome(total) {
  * count or the output size has moved, so the loop summary has nothing to say.
  * The frame store does have to go — those frames have the mesh in them.
  */
+/*
+ * Warm the bundled faces at startup and redraw once they land.
+ *
+ * The first drawPreviewCaption() runs long before a font file has been
+ * fetched, so whatever it measured was a fallback. Redrawing on fonts.ready
+ * is what replaces that with the real thing.
+ */
+if (document.fonts?.load) {
+  for (const family of BUNDLED_FONTS) waitForFont(family);
+  document.fonts.ready.then(() => drawPreviewCaption());
+}
+
 function applyMeshVisibility() {
   scene.setHiddenMeshes(hiddenMeshes);
   syncMeshChrome(scene.meshList().length);
@@ -1040,6 +1083,16 @@ for (const id of ['text-top', 'text-middle', 'text-bottom', 'text-font',
     drawPreviewCaption();
   });
 }
+
+// Picking a font that has not been fetched yet draws once with the fallback
+// and again for real; both are cheap, and the alternative is a caption that
+// sits at the wrong size until something else happens to redraw it.
+$('text-font').addEventListener('input', async () => {
+  const caption = readCaption();
+  if (!caption) return;
+  await waitForFont(caption.family);
+  drawPreviewCaption();
+});
 
 $('text-mode').addEventListener('change', () => {
   const classic = $('text-mode').value === 'classic';
@@ -1358,19 +1411,32 @@ $('render').addEventListener('click', async () => {
   stopPlayback({ rewind: false });
 
   discardStore();
-  $('render').disabled = true;
-  $('cancel').disabled = false;
 
-  scene.applySettings(readSettings());
-  const spin = readSpin();
-  const started = performance.now();
-
+  // Everything from here is inside the try, so the finally below always gets
+  // to put the buttons back. Left outside it, anything that threw between
+  // disabling Render and entering the try would leave the app unable to
+  // render at all, with no message and nothing to do but reload.
   try {
+    $('render').disabled = true;
+    $('cancel').disabled = false;
+
+    scene.applySettings(readSettings());
+    const spin = readSpin();
+
+    // Every frame measures the font. Waiting here rather than inside
+    // makeResolver() keeps the per-frame path synchronous, and means the
+    // whole capture agrees with itself instead of the first few frames
+    // using a fallback.
+    const caption = readCaption();
+    if (caption) await waitForFont(caption.family);
+
+    const started = performance.now();
+
     const result = await captureFrames(scene, spin, (done, total) => {
       setProgress(done, total);
       $('store-info').textContent = `Rendering frame ${done} of ${total}…`;
       return !cancelRequested;
-    }, readCaption());
+    }, caption);
 
     if (!result) {
       $('store-info').textContent = 'Cancelled.';

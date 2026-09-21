@@ -431,6 +431,61 @@ one, since text cannot be drawn into a WebGL context. Both canvases are given
 the same intrinsic size, so the stage's grid lays them on top of each other
 with nothing to measure or keep in sync.
 
+### Fonts
+
+The Font list has two groups. **Included** are five faces bundled with the
+app, so they are there on every machine. **From your system** are the familiar
+names, which render only if the viewer happens to have them.
+
+| Included | stands in for | size |
+| --- | --- | --- |
+| Anton | Impact | 18.6 KB |
+| Oswald | Futura Condensed Extra Bold | 12.7 KB |
+| Comic Neue | Comic Sans MS | 19.2 KB |
+| Arimo | Arial — metrically identical | 11.5 KB |
+| Tinos | Times New Roman — metrically identical | 17.8 KB |
+
+All five are SIL Open Font License 1.1, with their licences in
+[vendor/fonts](vendor/fonts). 92 KB for the set, latin subset, WOFF2.
+
+Bundling them is not a preference, it is the only lawful option. Impact,
+Arial and Times New Roman are Monotype's; Comic Sans and Wingdings are
+Microsoft's; Futura Condensed Extra Bold is Neufville's. The "Core fonts for
+the Web" licence that once covered Arial, Impact and Comic Sans allowed
+redistribution only as Microsoft's original installer, and that programme
+ended in 2002 — serving the extracted `.ttf` from a public site is outside
+all of it.
+
+Two of those have no free equivalent and are simply absent: **Futura
+Condensed Extra Bold**, where Oswald is close in weight and width but not in
+construction, and **Wingdings**, whose glyph mapping nobody has cloned. Both
+still work through the system group on a machine that has them.
+
+The fonts are **self-hosted, not pulled from a CDN**. A `fonts.googleapis.com`
+link would have been two lines, and would have broken the one property this
+app actually promises — it makes no network requests — while reporting every
+visitor's address to a third party.
+
+Each bundled stack still names its system counterpart underneath
+(`Anton, Impact, 'Arial Narrow Bold', sans-serif`), so a font file that fails
+to load lands on something the right shape.
+
+#### Why the loading is not just a `@font-face`
+
+`measureText` and `fillText` fall back to a default face, silently, if a font
+has not finished loading. Because the caption is *measured* from the font, a
+fallback does not merely look wrong for a moment — it is measured, sized and
+wrapped as though it were the real thing, so the first render after a reload
+could disagree with every render after it.
+
+Three things prevent that: the bundled families are warmed at startup and the
+preview redraws on `document.fonts.ready`; changing the font awaits the new
+one before redrawing; and the render handler awaits the selected family
+before `captureFrames()` runs, which keeps the per-frame path synchronous
+while still guaranteeing the whole capture agrees with itself.
+`font-display: block` finishes the job, so a slow load shows nothing rather
+than flashing a fallback into a frame.
+
 **Psycho mode** is in the dropdown but not built. It draws nothing at all
 rather than quietly behaving like Classic mode.
 
@@ -566,3 +621,7 @@ content/              wordmarks, the theme clip, and a small test model
 Rendering by [three.js](https://threejs.org). GIF quantisation by
 [gifenc](https://github.com/mattdesl/gifenc). Deflate by
 [fflate](https://github.com/101arrowz/fflate).
+
+Caption fonts, all under the SIL Open Font License 1.1 and bundled in
+[vendor/fonts](vendor/fonts) with their licences: **Anton**, **Oswald**,
+**Comic Neue**, **Arimo** and **Tinos**.

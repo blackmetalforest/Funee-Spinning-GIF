@@ -6,6 +6,80 @@
  *           scroll underneath), settings below.
  */
 
+/*
+ * Caption fonts, bundled so the default looks the same everywhere.
+ *
+ * Impact — the face a caption wants — ships with Windows and macOS and is on
+ * essentially no Linux or Android machine, where the stack used to fall
+ * through to a generic sans. Shipping the real Impact is not an option: it is
+ * Monotype's, and the old "Core fonts for the Web" licence allowed
+ * redistribution only as Microsoft's original installer, a programme that
+ * ended in 2002. These five are open lookalikes, all SIL OFL 1.1, with their
+ * licences beside them in vendor/fonts/.
+ *
+ * Self-hosted rather than pulled from Google's CDN: the page makes no network
+ * requests of its own and is not about to start, least of all ones that would
+ * report every visitor's address to a third party.
+ *
+ * The latin subset only, about 92KB for the five. unicode-range is what makes
+ * that safe — a character outside it falls through to the next font in the
+ * stack instead of rendering as a missing-glyph box.
+ *
+ * One cut per family — Oswald's and Comic Neue's bold ones, since a caption
+ * wants weight — each declared as the normal weight. The canvas asks for
+ * "40px Oswald" with no weight of its own, so an exact match is what stops
+ * the browser synthesising a fake regular or falling back.
+ *
+ * font-display: block, because these are measured. A swapped-in fallback
+ * would not merely look wrong for an instant, it would be measured, sized and
+ * wrapped as though it were the real thing.
+ */
+
+@font-face {
+  font-family: 'Anton';
+  font-style: normal;
+  font-weight: normal;
+  font-display: block;
+  src: url('../vendor/fonts/anton-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Oswald';
+  font-style: normal;
+  font-weight: normal;
+  font-display: block;
+  src: url('../vendor/fonts/oswald-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Comic Neue';
+  font-style: normal;
+  font-weight: normal;
+  font-display: block;
+  src: url('../vendor/fonts/comic-neue-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Arimo';
+  font-style: normal;
+  font-weight: normal;
+  font-display: block;
+  src: url('../vendor/fonts/arimo-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Tinos';
+  font-style: normal;
+  font-weight: normal;
+  font-display: block;
+  src: url('../vendor/fonts/tinos-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 :root {
   --bg: #15161a;
   --panel: #1c1e24;
