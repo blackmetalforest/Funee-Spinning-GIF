@@ -273,6 +273,81 @@ export function isBlank({ top, middle, bottom } = {}) {
 }
 
 /**
+ * Lay out the caption band that "On Top" mode grows above the image.
+ *
+ * The band is the one thing here whose *height* is an output rather than an
+ * input: it is however tall the wrapped text needs it to be. That makes this
+ * function load-bearing in a way the others are not — the preview and the
+ * capture must arrive at the same number or the two disagree about how big
+ * the exported image is, so both call this and neither measures its own.
+ *
+ * `height` is the height of the **render**, not of the finished image. The
+ * font is sized by the same fontBasis() rule as every other mode, so the
+ * letters in the band match the letters an In Front caption would have drawn,
+ * and the 10-Ms-across promise holds. Sizing from the band's own height would
+ * be circular anyway.
+ *
+ * Returns y values relative to the top of the band.
+ */
+export function layoutBand(ctx, text, { width, height, family, scale = 1 }) {
+  const body = String(text ?? '').trim();
+  if (!body) return { size: 0, bandHeight: 0, lines: [] };
+
+  const size = fontPx(ctx, family, height, scale);
+  ctx.font = `${size}px ${family}`;
+
+  const lines = wrapLines(ctx, body, usableWidth(width));
+  if (!lines.length) return { size, bandHeight: 0, lines: [] };
+
+  // Same clear space as the in-image captions, measured to the ink the same
+  // way, so a band caption and a top caption sit off their edge identically.
+  const pad = height * EDGE_MARGIN;
+  const ink = inkOffsets(ctx, size);
+  const lineStep = size * LINE_HEIGHT;
+  const lastLine = (lines.length - 1) * lineStep;
+  const inkHeight = lastLine + ink.bottom - ink.top;
+
+  // Rounded up: the band is a real number of pixels in the output, and
+  // rounding down would shave the descender off the last line.
+  const bandHeight = Math.ceil(pad * 2 + inkHeight);
+  const y0 = pad - ink.top;
+  const centre = width / 2;
+
+  return {
+    size,
+    bandHeight,
+    lines: lines.map((line, i) => ({ text: line, x: centre, y: y0 + i * lineStep })),
+  };
+}
+
+/**
+ * Paint the band: a white panel with black text and no outline.
+ *
+ * Fixed colours rather than settings, because the mode *is* the look — this
+ * is the caption-above-the-picture format, and a stroke on black-on-white
+ * would only ever spoil it. `y` offsets the whole band, which the preview
+ * needs and the capture does not.
+ */
+export function drawBand(ctx, text, opts) {
+  const { width, y = 0 } = opts;
+  // Inside the save: laying out sets ctx.font, which is the caller's to keep.
+  ctx.save();
+  const { bandHeight, lines } = layoutBand(ctx, text, opts);
+  if (!bandHeight) { ctx.restore(); return 0; }
+
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, y, width, bandHeight);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = '#000';
+  for (const line of lines) {
+    if (line.text) ctx.fillText(line.text, line.x, y + line.y);
+  }
+  ctx.restore();
+  return bandHeight;
+}
+
+/**
  * Paint the caption onto a 2D context sized `width` x `height`.
  *
  * Stroke first and fill second, with round joins: drawing the outline under

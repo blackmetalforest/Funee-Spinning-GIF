@@ -11,7 +11,7 @@ import { SpinScene, DEFAULT_SETTINGS } from './scene.js';
 import { loadModel, FILE_ACCEPT, SELF_CONTAINED, AUTO, NONE } from './loaders.js';
 import { baseName, stemOf, extOf, IMAGE_EXTENSIONS } from './archive.js';
 import { labelMeshes, toggleLabel, meshSummary } from './mesh-list.js';
-import { drawText, isBlank } from './overlay-text.js';
+import { drawText, drawBand, layoutBand, isBlank } from './overlay-text.js';
 import { captureFrames, decodeFrames, storeSize } from './capture.js';
 import { loopSummary, FPS_LIMIT, frameAngles, frameDelaysMs,
          frameStarts, frameIndexAt } from './encoders/timing.js';
@@ -125,26 +125,40 @@ function clampInt(value, lo, hi, fallback) {
 /* ---------------------------------------------------------------- text */
 
 /**
- * The caption as the controls currently describe it.
+ * The caption as the controls currently describe it, or null for none.
  *
- * Psycho mode is not built, so it draws nothing at all rather than quietly
- * behaving like Classic — a mode that silently did something else would be
- * worse than one that plainly does nothing.
+ * Null means "compose the frame with no caption at all", which covers both
+ * Disabled and every mode with nothing typed into it — the compositor and the
+ * preview then take the same short path they always did.
+ *
+ * `mode` rides along because where the caption goes is not something the
+ * drawing code can work out from the text: In Front and Behind read
+ * identically here and differ only in what is drawn over what.
  */
 function readCaption() {
-  if ($('text-mode').value !== 'classic') return null;
+  const mode = $('text-mode').value;
+  if (mode === 'off') return null;
+
+  const style = {
+    mode,
+    family: $('text-font').value,
+    // On Top is black on white; an outline would only ever spoil it, so the
+    // control is hidden there and the value it holds is ignored.
+    weight: mode === 'ontop' ? 0 : +$('text-stroke').value,
+    scale: +$('text-size').value / 100,
+  };
+
+  if (mode === 'ontop') {
+    const band = $('text-band-copy').value;
+    return band.trim() ? { ...style, band } : null;
+  }
+
   const text = {
     top: $('text-top').value,
     middle: $('text-middle').value,
     bottom: $('text-bottom').value,
   };
-  if (isBlank(text)) return null;
-  return {
-    text,
-    family: $('text-font').value,
-    weight: +$('text-stroke').value,
-    scale: +$('text-size').value / 100,
-  };
+  return isBlank(text) ? null : { ...style, text };
 }
 
 /**
@@ -194,12 +208,32 @@ async function waitForFont(family) {
  *
  * The overlay is a separate 2D canvas because you cannot draw text into a
  * WebGL context; the backdrop is a div because a flat colour needs nothing
- * more. What this function owns is the *arrangement*: it is the preview's
- * half of the same decision makeResolver() makes for the export, and the two
- * have to agree or what you see is not what you save.
+ * more. What this function really owns is the *arrangement*: it is the
+ * preview's half of the same decision makeResolver() makes for the export,
+ * and the two have to agree or what you see is not what you save.
  */
+/**
+ * How much taller the band makes the exported image, in output pixels.
+ * Written by drawPreviewCaption(), read by updateViewSize().
+ */
+let bandOutPx = 0;
+
+/**
+ * A scratch context for measuring the band at output scale.
+ *
+ * Its own, rather than the overlay's: measuring sets ctx.font, and the
+ * overlay is about to be resized — which resets its context anyway — so
+ * borrowing it would only make the ordering matter.
+ */
+let probeCtx = null;
+function bandProbe() {
+  if (!probeCtx) probeCtx = document.createElement('canvas').getContext('2d');
+  return probeCtx;
+}
+
 function drawPreviewCaption() {
   const overlay = $('overlay');
+  const frame = $('frame');
   /*
    * Sized from the render canvas, deliberately — not from the settings.
    *
@@ -213,23 +247,59 @@ function drawPreviewCaption() {
   const source = scene.canvas;
   const w = Math.max(1, source.width);
   const h = Math.max(1, source.height);
-  if (overlay.width !== w || overlay.height !== h) {
-    overlay.width = w;
-    overlay.height = h;
-  }
+
+  const caption = readCaption();
+  const hidden = canvas.classList.contains('empty');
 
   // The colour layer. Empty string lets the stage's checkerboard through,
   // which is how a transparent background has always read here.
   $('backdrop').style.backgroundColor = readBackdrop() ?? '';
-  // What CSS scales, so the three layers cannot drift apart.
-  $('frame').style.aspectRatio = `${w} / ${h}`;
+
+  /*
+   * The band is measured at the *output* size, not at the preview's, and the
+   * preview is scaled from that answer rather than measuring its own.
+   *
+   * It matters because the band's height is rounded to whole pixels. The
+   * preview canvas is supersampled — two or three times the output — so
+   * measuring there and dividing would round in a different place and leave
+   * the preview a pixel or two out from the file you save. Measuring the
+   * thing that actually ships, once, and scaling up is exact.
+   */
+  const out = readSettings();
+  bandOutPx = 0;
+  if (caption?.mode === 'ontop' && !hidden) {
+    bandOutPx = layoutBand(bandProbe(), caption.band,
+      { ...caption, width: out.width, height: out.height }).bandHeight;
+  }
+  const band = Math.round(bandOutPx * (h / Math.max(1, out.height)));
+
+  if (overlay.width !== w || overlay.height !== h + band) {
+    overlay.width = w;
+    overlay.height = h + band;
+  }
+  // Rows in real pixels, so the band and the render scale as one piece; the
+  // aspect ratio is what lets the whole thing be fitted into the stage.
+  frame.style.gridTemplateRows = `${band}fr ${h}fr`;
+  frame.style.aspectRatio = `${w} / ${h + band}`;
+  frame.classList.toggle('behind', caption?.mode === 'behind');
+
+  // Reported here rather than left to the callers: the band is measured as
+  // part of drawing, and every path that changes it comes through this
+  // function, so this is the one place the readout cannot go stale.
+  updateViewSize();
 
   const ctx = overlay.getContext('2d');
   ctx.clearRect(0, 0, overlay.width, overlay.height);
-  overlay.hidden = canvas.classList.contains('empty');
-  const caption = readCaption();
-  if (!caption || overlay.hidden) return;
-  drawText(ctx, caption.text, { ...caption, width: overlay.width, height: overlay.height });
+  overlay.hidden = hidden;
+  if (!caption || hidden) return;
+
+  if (caption.mode === 'ontop') {
+    drawBand(ctx, caption.band, { ...caption, width: w, height: h, y: 0 });
+  } else {
+    // In Front and Behind draw the same thing in the same place. Which one
+    // ends up on top is the CSS class set above, not anything drawn here.
+    drawText(ctx, caption.text, { ...caption, width: w, height: h });
+  }
 }
 
 /* ------------------------------------------------------------- display */
@@ -318,9 +388,19 @@ function updateLoopInfo() {
     `${info.actualRps.toFixed(3)} rounds/s`;
 }
 
+/*
+ * The size in the corner of the view.
+ *
+ * Width and Height keep describing the *render* — On Top does not change what
+ * you asked for — so when the band makes the finished image taller, both
+ * numbers are shown rather than one silently replacing the other.
+ */
 function updateViewSize() {
   const s = readSettings();
-  $('view-size').textContent = `${s.width} × ${s.height}`;
+  const requested = `${s.width} × ${s.height}`;
+  $('view-size').textContent = bandOutPx > 0
+    ? `${requested} · output ${s.width} × ${s.height + bandOutPx}`
+    : requested;
 }
 
 function setBusy(text) {
@@ -550,8 +630,7 @@ function schedulePreview() {
 function applyAndPreview() {
   syncOutputs();
   updateLoopInfo();
-  updateViewSize();
-  drawPreviewCaption();
+  drawPreviewCaption();          // which also refreshes the size readout
   if (playing) resyncCycle();   // frames/speed/direction may have moved
   schedulePreview();
 }
@@ -1109,8 +1188,8 @@ $('mesh-list').addEventListener('scroll', stopMeshFlash);
  * settings. The sliders are in RANGE_IDS and already redraw the preview, so
  * here they only have to drop the store.
  */
-for (const id of ['text-top', 'text-middle', 'text-bottom', 'text-font',
-  'text-stroke', 'text-size', 'text-mode']) {
+for (const id of ['text-top', 'text-middle', 'text-bottom', 'text-band-copy',
+  'text-font', 'text-stroke', 'text-size', 'text-mode']) {
   $(id).addEventListener('input', () => {
     discardStore();
     drawPreviewCaption();
@@ -1127,12 +1206,63 @@ $('text-font').addEventListener('input', async () => {
   drawPreviewCaption();
 });
 
-$('text-mode').addEventListener('change', () => {
-  const classic = $('text-mode').value === 'classic';
-  $('text-classic').hidden = !classic;
-  $('text-psycho').hidden = classic;
+/*
+ * The font and size each mode was last set to.
+ *
+ * On Top wants its own defaults — black Oswald, and rather smaller letters —
+ * but both controls are shared with In Front and Behind, so forcing them on
+ * every switch would quietly discard whatever you had picked for the others.
+ * One remembered pair per mode gives On Top its look without spending the
+ * other modes' settings to do it, and hands back what you chose if you
+ * switch away and come back.
+ *
+ * The size default is the interesting one. 100% means "ten capital Ms span
+ * the image", which is right for a caption *over* a picture and much too big
+ * for a paragraph above one: a sentence at 100% grew a band taller than the
+ * image it captioned. 50% puts a typical caption at three or four lines, the
+ * proportion the format is usually seen in.
+ */
+const OSWALD = Array.from($('text-font').options)
+  .find((o) => o.value.startsWith('Oswald'))?.value ?? $('text-font').value;
+const STYLE_BY_MODE = {
+  front: { font: $('text-font').value, size: $('text-size').value },
+  behind: { font: $('text-font').value, size: $('text-size').value },
+  ontop: { font: OSWALD, size: '50' },
+};
+let lastTextMode = $('text-mode').value;
+
+function rememberTextStyle() {
+  if (lastTextMode === 'off') return;
+  STYLE_BY_MODE[lastTextMode] = { font: $('text-font').value, size: $('text-size').value };
+}
+$('text-font').addEventListener('change', rememberTextStyle);
+$('text-size').addEventListener('change', rememberTextStyle);
+
+$('text-mode').addEventListener('change', async () => {
+  const mode = $('text-mode').value;
+  $('text-blocks').hidden = mode !== 'front' && mode !== 'behind';
+  $('text-band').hidden = mode !== 'ontop';
+  $('text-style').hidden = mode === 'off';
+  $('text-stroke-row').hidden = mode === 'ontop';
+
+  const style = STYLE_BY_MODE[mode];
+  if (style) {
+    $('text-font').value = style.font;
+    $('text-size').value = style.size;
+    syncOutputs();               // the size reading follows the slider
+  }
+  lastTextMode = mode;
+
   discardStore();
   drawPreviewCaption();
+  // The remembered font may not have been fetched yet, and until it is the
+  // caption is measured from a fallback and sized wrong. Draw again once it
+  // has arrived, exactly as picking a font by hand does.
+  const caption = readCaption();
+  if (caption) {
+    await waitForFont(caption.family);
+    drawPreviewCaption();
+  }
 });
 window.addEventListener('blur', stopMeshFlash);
 

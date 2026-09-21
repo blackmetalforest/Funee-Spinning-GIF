@@ -391,16 +391,61 @@ that is one draw per second, and a 1-frame still draws once and then stops.
 
 ## Text
 
-A **Text** section lays a caption over the animation: one box for the top of
-the image, one for the centre, one for the bottom, then Font, Stroke weight
-and Size under them. Text is always centred, and wraps on its own when a line
-runs out of room — or press **Enter** to break a line early, exactly where you
-want it. Two Enters leave a blank line rather than being swallowed.
+A **Text** section captions the animation. The Mode dropdown decides *where*
+the caption goes, and it is **Disabled** by default, so a fresh page makes the
+picture you asked for and nothing else.
 
-Each box holds three lines at a glance and up to **5,000 characters**. A
-caption that long runs off the image, which is allowed; lines that fall
-entirely outside are skipped rather than handed to the rasteriser once per
-frame.
+| Mode | What it does |
+| --- | --- |
+| **Disabled** | no caption; nothing is drawn and nothing is measured |
+| **In Front** | top / centre / bottom boxes drawn over the render |
+| **On Top** | one caption in a white band grown *above* the image |
+| **Behind** | the same three boxes as In Front, composited *under* the render |
+
+In Front and Behind share one set of controls — Font, Stroke weight, Size, and
+the three boxes — and differ only in what is drawn over what. Text is always
+centred, and wraps on its own when a line runs out of room; press **Enter** to
+break a line early, exactly where you want it, and two Enters leave a blank
+line rather than being swallowed.
+
+Every box holds up to **5,000 characters**. A caption that long runs off the
+image, which is allowed; lines that fall entirely outside are skipped rather
+than handed to the rasteriser once per frame.
+
+### On Top changes the size of the exported image
+
+This is the one mode that does. The band is however tall its own wrapped text
+needs it to be — type a longer caption and the picture grows upward — so the
+finished image is taller than the render that went into it.
+
+**Width and Height keep describing the render.** Ask for 480x480 and the model
+is still rendered at 480x480; nothing that reads those numbers learns the band
+exists. Only two things know: the composed frame, and the readout under the
+view, which says `480 × 480 · output 480 × 578` whenever the two differ.
+
+The band is white with black text and no outline, so the Stroke control is
+hidden there. The mode defaults to **Oswald at 50%** while In Front and Behind
+default to Anton at 100% — each mode remembers its own pair, so switching back
+and forth does not spend one mode's settings on the other. The smaller default
+is not arbitrary: 100% means "ten capital Ms span the image", which is right
+for a caption *over* a picture and much too big for a paragraph above one — a
+single sentence at 100% grows a band taller than the image it captions.
+
+### Behind
+
+Behind draws the caption first and the render over it, so the model occludes
+the text as it turns.
+
+That is easy on a transparent background and was impossible on an opaque one,
+where the render covered the caption completely with nothing the caption code
+could do about it. It works because
+[the background is a layer](#the-background-is-a-layer-not-a-clear-colour)
+rather than the renderer's clear colour: Behind's text is imprinted on that
+coloured layer, and Background and Transparent go on meaning exactly what they
+say.
+
+In the preview it is one CSS class, which lifts the render above the caption
+in the same grid cell.
 
 The three blocks anchor differently, which is what makes them behave when the
 text grows:
@@ -490,9 +535,22 @@ the model. Because it goes into the frame store rather than into a save step,
 one render feeds a GIF, a WebP, an APNG and a ZIP that all agree.
 
 The preview draws the same thing onto a second canvas stacked over the WebGL
-one, since text cannot be drawn into a WebGL context. Both canvases are given
-the same intrinsic size, so the stage's grid lays them on top of each other
-with nothing to measure or keep in sync.
+one, since text cannot be drawn into a WebGL context. Both canvases sit in one
+grid inside `#frame`, which is sized to the *finished* picture: its rows are
+set to the real pixel heights of the band and the render, as
+`<band>fr <render>fr`, so the two always scale by the same factor with nothing
+measured. With no band the rows resolve to `0fr 1fr` and it is the plain stack
+it has always been. Behind mode is one class, which lifts the render over the
+caption.
+
+The band's height is the one number both halves must agree on, so both call
+the same `layoutBand()` in [src/overlay-text.js](src/overlay-text.js) — and
+both measure it **at the output size**, never at the preview's. The preview
+canvas is supersampled, two or three times the output, and the band is rounded
+to whole pixels; measure there and divide and the rounding lands in a different
+place, leaving the preview a pixel or two out from the file you save. Measuring
+what actually ships and scaling up is exact: the band is 98px of 480 at every
+quality setting, in the preview and in the export alike.
 
 ### Fonts
 
@@ -552,8 +610,8 @@ while still guaranteeing the whole capture agrees with itself.
 `font-display: block` finishes the job, so a slow load shows nothing rather
 than flashing a fallback into a frame.
 
-**Psycho mode** is in the dropdown but not built. It draws nothing at all
-rather than quietly behaving like Classic mode.
+Switching mode also re-waits: each mode remembers its own font, and a
+remembered face may not have been fetched yet.
 
 ## Output formats
 
@@ -597,7 +655,7 @@ renderer.
 
 It used to clear to the colour, which made the background the bottom-most
 thing in the image and left nothing that could ever be placed under it. Making
-it a layer is what allows anything to be drawn *behind* the model.
+it a layer is what allows the caption's Behind mode to exist at all.
 
 The change is invisible. Compositing the model over the colour with
 source-over in the 2D canvas is the same operation the GL clear was doing, one
@@ -666,9 +724,11 @@ node tests/run.mjs
 ```
 
 Covers the logic that needs no DOM: delay rounding (including the half-to-even
-edge case), loop angles, the PNG encoder, both muxers, and the archive hunter —
-path handling, texture-name classification, model ranking, the lookup chain and
-the .mtl transparency repair, against zips built in memory.
+edge case), loop angles, the PNG encoder, both muxers, the caption layout —
+wrapping, ink placement and the band's height, which is the one figure the
+preview and the export must agree on — and the archive hunter: path handling,
+texture-name classification, model ranking, the lookup chain and the .mtl
+transparency repair, against zips built in memory.
 
 `tests/collect_server.py` is a static server that also accepts POSTs, so an
 automated browser run can hand exported files back and have their frame counts

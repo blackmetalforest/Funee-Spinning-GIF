@@ -21,7 +21,7 @@ import { openArchive, AssetIndex, rankModels, cleanPath, normKey, extOf, stemOf,
 import { sanitiseMtl } from '../src/mtl-fix.js';
 import { labelMeshes, toggleLabel, meshSummary } from '../src/mesh-list.js';
 import { fontPx, strokePx, wrapLines, layoutText, drawText, isBlank, MS_ACROSS,
-         usableWidth, fontBasis } from '../src/overlay-text.js';
+         usableWidth, fontBasis, layoutBand, drawBand } from '../src/overlay-text.js';
 import { zipSync, strToU8 } from '../vendor/fflate.module.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -574,6 +574,124 @@ check('an empty caption places nothing',
 check('isBlank spots an empty caption', isBlank({ top: ' ', middle: '', bottom: null }));
 check('isBlank spots a filled one', !isBlank({ bottom: 'x' }));
 check('isBlank tolerates nothing at all', isBlank());
+
+console.log('\ncaption band (On Top)');
+/*
+ * The band is the one piece of layout whose *height* is an output, and two
+ * places have to arrive at the same number for it — the preview and the
+ * capture — or they disagree about how big the exported image is. Hence
+ * rather more tests than a bit of text drawing would usually earn.
+ */
+const bandOf = (text, width = 480, height = 480, scale = 1) =>
+  layoutBand(stub(), text, { width, height, family: 'Impact', scale });
+
+check('nothing typed grows no band', bandOf('').bandHeight === 0);
+check('whitespace alone grows no band', bandOf('   \n  ').bandHeight === 0);
+check('text grows a band', bandOf('HELLO').bandHeight > 0);
+
+{
+  // The stub has no ink extents, so a line is exactly `size` tall and the
+  // step between lines is size * LINE_HEIGHT. Both are constants here, so a
+  // second line must add exactly one step and nothing else.
+  const one = bandOf('MMM');
+  const two = bandOf('MMM\nMMM');
+  const three = bandOf('MMM\nMMM\nMMM');
+  const step = two.bandHeight - one.bandHeight;
+  check('a second line adds one line step', step > 0);
+  check('a third line adds the same again',
+        Math.abs((three.bandHeight - two.bandHeight) - step) <= 1);
+  check('the step is the line height', Math.abs(step - one.size * 1.12) <= 1);
+}
+
+{
+  // Wrapping must respect the side margins, exactly as the in-image captions
+  // do — measuring against the full width is the bug that once wrapped the
+  // promised 14 Ms at 13.
+  const fits = bandOf('M'.repeat(MS_ACROSS));
+  const over = bandOf('M'.repeat(MS_ACROSS + 1));
+  check('the promised Ms fit on one band line', fits.lines.length === 1);
+  check('one more wraps the band to two', over.lines.length === 2);
+  const ctx = stub();
+  const laid = layoutBand(ctx, 'M'.repeat(MS_ACROSS), { width: 480, height: 480, family: 'Impact' });
+  ctx.font = `${laid.size}px Impact`;
+  check('the band line fits the usable width',
+        ctx.measureText(laid.lines[0].text).width <= usableWidth(480) + 0.5);
+}
+
+{
+  /*
+   * Scale invariance, the rule the whole file is built on: a band is the same
+   * fraction of the image at every size. This is the test that catches a
+   * stray absolute pixel, which would leave the band right at 480 and wrong
+   * everywhere else.
+   */
+  const small = bandOf('SOME CAPTION HERE', 480, 480);
+  const big = bandOf('SOME CAPTION HERE', 960, 960);
+  check('doubling the image doubles the band',
+        Math.abs(big.bandHeight - small.bandHeight * 2) <= 1);
+  check('the same text wraps the same either way',
+        big.lines.length === small.lines.length);
+}
+
+{
+  // The font is sized from the height, so a wider image fits more on a line
+  // without the band getting taller — the same rule fontBasis() exists for.
+  const square = bandOf('M'.repeat(MS_ACROSS * 2), 480, 480);
+  const wide = bandOf('M'.repeat(MS_ACROSS * 2), 960, 480);
+  check('a wider image needs fewer band lines', wide.lines.length < square.lines.length);
+  check('a wider image does not change the letter size',
+        Math.abs(wide.size - square.size) < 0.01);
+}
+
+{
+  const taller = bandOf('HELLO', 480, 480, 2);
+  const plain = bandOf('HELLO', 480, 480, 1);
+  check('the size control grows the band', taller.bandHeight > plain.bandHeight);
+}
+
+{
+  // Every line is centred, and the band starts at its own top rather than
+  // the image's — the preview offsets it, the capture does not.
+  const laid = bandOf('ONE\nTWO');
+  check('band lines are centred', laid.lines.every((l) => l.x === 240));
+  check('the band starts at its own origin', laid.lines[0].y >= 0);
+  check('the last line sits inside the band',
+        laid.lines[1].y + laid.size <= laid.bandHeight + 1);
+}
+
+{
+  /*
+   * drawBand paints a white panel and black text with no outline. Recording
+   * the calls is the only way to assert "no outline" — a stroke of zero is
+   * not something the geometry can show.
+   */
+  const calls = [];
+  const rec = {
+    font: '10px x', fillStyle: '', strokeStyle: '', textAlign: '', textBaseline: '',
+    measureText(t) { return { width: t.length * 0.82 * (parseFloat(this.font) || 10) }; },
+    save() { calls.push(['save']); },
+    restore() { calls.push(['restore']); },
+    fillRect(...a) { calls.push(['fillRect', this.fillStyle, ...a]); },
+    fillText(t, x, y) { calls.push(['fillText', this.fillStyle, t, x, y]); },
+    strokeText(t) { calls.push(['strokeText', t]); },
+  };
+  const h = drawBand(rec, 'HI', { width: 480, height: 480, family: 'Impact' });
+  const rects = calls.filter((c) => c[0] === 'fillRect');
+  const texts = calls.filter((c) => c[0] === 'fillText');
+  check('drawBand reports the height it drew', h > 0);
+  check('drawBand paints one panel', rects.length === 1);
+  check('the panel is white', rects[0][1] === '#fff');
+  check('the panel spans the full width and the band', rects[0][4] === 480 && rects[0][5] === h);
+  check('the text is black', texts.length === 1 && texts[0][1] === '#000');
+  check('the band is never stroked', !calls.some((c) => c[0] === 'strokeText'));
+  check('drawBand leaves the context as it found it',
+        calls[0][0] === 'save' && calls[calls.length - 1][0] === 'restore');
+
+  const empty = [];
+  const rec2 = { ...rec, fillRect: (...a) => empty.push(a), fillText: (...a) => empty.push(a) };
+  check('an empty band draws nothing', drawBand(rec2, '  ', { width: 480, height: 480, family: 'Impact' }) === 0);
+  check('an empty band really draws nothing', empty.length === 0);
+}
 
 console.log('\nbundled fonts');
 /*

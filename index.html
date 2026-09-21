@@ -22,14 +22,15 @@
   <section id="view" aria-label="Render preview">
     <div id="stage">
       <!--
-        The exported image, in layers: the background colour, the render, and
-        the caption over it. #frame is sized to the image so all three scale
-        together, and so the backdrop covers the picture rather than the whole
-        stage around it.
+        The exported image, in layers. #frame is sized to the *finished*
+        picture, which On Top mode makes taller than the render; its grid rows
+        are set in JS so the band and the render always scale as one piece.
 
-        The caption is a 2D canvas because you cannot draw text into a WebGL
-        context, and it is "preview" only in the sense that this element is:
-        captureFrames() bakes the very same drawing into every exported frame.
+        Bottom to top: the background colour, the caption, the render — except
+        in Behind mode, where a class swaps the last two. The caption is a 2D
+        canvas because you cannot draw text into a WebGL context, and it is
+        "preview" only in the sense that this element is: captureFrames()
+        bakes the very same drawing into every exported frame.
       -->
       <div id="frame">
         <div id="backdrop"></div>
@@ -232,19 +233,38 @@
 
     <section class="group">
       <h2>Text</h2>
+      <!--
+        Where the caption goes, not whether it exists. Off by default, so a
+        fresh page makes the picture you asked for and nothing else.
+      -->
       <div class="row"><label for="text-mode">Mode</label>
         <select id="text-mode">
-          <option value="classic" selected>Classic mode</option>
-          <option value="psycho">Psycho mode</option>
+          <option value="off" selected>Disabled</option>
+          <option value="front">In Front</option>
+          <option value="ontop">On Top</option>
+          <option value="behind">Behind</option>
         </select></div>
 
-      <div id="text-classic">
+      <!-- In Front and Behind: identical controls, only the stacking differs. -->
+      <div id="text-blocks" hidden>
         <div class="row row-text"><label for="text-top">Top</label>
-          <textarea id="text-top" rows="3" maxlength="5000" placeholder="—"></textarea></div>
+          <textarea id="text-top" rows="2" maxlength="5000" placeholder="—"></textarea></div>
         <div class="row row-text"><label for="text-middle">Center</label>
-          <textarea id="text-middle" rows="3" maxlength="5000" placeholder="—"></textarea></div>
+          <textarea id="text-middle" rows="2" maxlength="5000" placeholder="—"></textarea></div>
         <div class="row row-text"><label for="text-bottom">Bottom</label>
-          <textarea id="text-bottom" rows="3" maxlength="5000" placeholder="—"></textarea></div>
+          <textarea id="text-bottom" rows="2" maxlength="5000" placeholder="—"></textarea></div>
+      </div>
+
+      <!--
+        On Top: one box, because top/centre/bottom mean nothing in a band that
+        has no picture to sit over. The band grows to fit whatever is typed.
+      -->
+      <div id="text-band" hidden>
+        <div class="row row-text"><label for="text-band-copy">Caption</label>
+          <textarea id="text-band-copy" rows="3" maxlength="5000" placeholder="—"></textarea></div>
+      </div>
+
+      <div id="text-style" hidden>
         <div class="row"><label for="text-font">Font</label>
           <!--
             The five bundled faces, and only those. Naming a system font here
@@ -260,7 +280,8 @@
             <option value="Arimo, Arial, Helvetica, sans-serif">Arimo — like Arial</option>
             <option value="Tinos, 'Times New Roman', Times, serif">Tinos — like Times</option>
           </select></div>
-        <div class="row"><label for="text-stroke">Stroke weight</label>
+        <!-- Hidden in On Top, where black-on-white wants no outline at all. -->
+        <div class="row" id="text-stroke-row"><label for="text-stroke">Stroke weight</label>
           <input type="range" id="text-stroke" min="0" max="20" step="0.1" value="5">
           <output for="text-stroke" id="text-stroke-out">5.0</output></div>
         <div class="row"><label for="text-size">Size</label>
@@ -270,9 +291,6 @@
           a wider image fits more on a line rather than growing the text.
           Centred, wraps on its own; press Enter to break a line early.</p>
       </div>
-
-      <p id="text-psycho" class="muted small" hidden>Psycho mode is not built
-        yet — nothing is drawn. Switch back to Classic mode.</p>
     </section>
 
     <section class="group">
