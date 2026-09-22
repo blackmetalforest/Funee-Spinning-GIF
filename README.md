@@ -19,6 +19,7 @@ Tip: change the Address → We Love Katamari
 
 **[Meshy.ai](https://www.meshy.ai/discover)** - AI Generated Models. Tip: Use a tool to download the .glb like **[this Browser Extension](https://github.com/efebaykaraa/meshy_downloader)** or **[this Tampermonkey Script](https://github.com/youssef02/meshy2glb)**
 
+**[Mii Creator](https://mii.nxw.pw/)** - Create Miis online. Create animations or download the glb for use in FSGM.
 .
 
 .
