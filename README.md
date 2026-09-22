@@ -2,7 +2,7 @@
 
 **[Open the FSGM Webapp →](https://blackmetalforest.github.io/Funee-Spinning-GIF/)**
 
-Drop in a 3D model, get a perfectly looping spin animation. Export it as a GIF,
+Drop in a 3D model, and configure a perfectly looping spinning animation. Export it as a GIF,
 animated WebP, APNG, or a ZIP of frames.
 
 Everything runs in your browser. Models are never uploaded, it's a static Webapp.
