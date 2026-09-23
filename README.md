@@ -39,7 +39,9 @@ Tip: change the Address → We Love Katamari
 - Loads 11 model formats, including textured GLB and FBX
 - Opens **.zip bundles** — finds the model inside, textures and all, even
   when it is buried in a second archive
-- Renders on the GPU with three.js
+- Renders on the GPU with three.js — with the model's own **physically based
+  materials** (normal, metal/roughness, emission, occlusion and the rest) lit
+  by an environment, or with the flat Classic look older rips were made for
 - Produces a **seamless loop** — frame *i* sits at exactly `i × 360/N` degrees,
   so the last frame steps into the first with no repeated pose
 - Takes a spin speed and a frame rate and works out the frame count for you,
@@ -53,11 +55,65 @@ Tip: change the Address → We Love Katamari
 ## Running it locally
 
 ```bash
-python3 -m http.server 8000
+python3 serve.py
 ```
 
 Then open <http://localhost:8000>. A static server is needed — ES modules don't
 load over `file://`.
+
+[serve.py](serve.py) is `python3 -m http.server` plus a `Cache-Control:
+no-cache` header. The stock server sends no caching instructions, so browsers
+keep the app's modules for hours without asking; after an update that mixes new
+files with stale ones and the app stops responding entirely. Any other static
+server works too, as long as it does not let the browser cache blindly. If a
+page ever seems dead after an update, a hard refresh (Ctrl+Shift+R) clears it.
+
+## When the browser is missing something
+
+The app used to go silently dead when a browser lacked something it needs:
+buttons did nothing and drops were ignored, because the app is one script and
+the failure stopped it before any button was wired up. Now a small classic
+script, [src/preflight.js](src/preflight.js), runs first, needs nothing the app
+might lack, and reports problems **under the file browser** — never as a
+pop-up — as one line of plain coloured text each, like the app's other
+errors: the headline and a **Browser check** link.
+
+- **Red — the app cannot do its job.**
+- **Orange — one feature is lost** (and switched off).
+
+**Browser check** (that link, or the one at the bottom of the settings) is
+where the explanation lives: each problem found with why it matters and what
+to try, then every check with ✅ or ❌ coloured by how much a failure matters,
+then a **Details for a bug report** block with the browser, the graphics card
+where the browser reveals it, and every error caught, file and line included.
+Minor problems appear there and nowhere else.
+
+| | Level | Detected by |
+| --- | --- | --- |
+| Opened from disk in a browser that will not run it that way | red | the address starts with `file:` *and* the app did not start — Firefox runs it from disk happily, so there it is not reported |
+| Browser too old for import maps | red | `HTMLScriptElement.supports('importmap')` |
+| 3D graphics switched off or blocked | red | no WebGL context at all; the browser's own reason goes in the details |
+| Only the older WebGL 1 | red | WebGL 1 opens, WebGL 2 does not |
+| No OffscreenCanvas, or no createImageBitmap | red | the APIs are missing |
+| Reading canvas pixels blocked | red | an exact test pattern comes back blank, randomised or not at all |
+| **The app did not start**, for any other reason | red | the app never reports ready before the page's `load` event — which module scripts always precede — so a stale cached file, a missing file or a crash is caught with its real error |
+| The graphics card dropped the page mid-use | red | a lost WebGL context; Browser check offers a Reload link, and frames already rendered can still be saved |
+| No half-float rendering | orange | Environment is forced to None |
+| Cannot encode WebP (Safari) | orange | Save WebP is disabled up front instead of failing after a click |
+| 3D running in slow software mode | orange | the browser refuses a context flagged as slow |
+| Any other unexpected error | orange | caught globally; one line however many, each message listed in Browser check |
+| Pixels faintly altered on read-back (anti-fingerprinting) | Browser check only | an exact test pattern comes back slightly off; exports may differ from the preview by a shade |
+| No MSAA, no anisotropic filtering, textures larger than the card allows | Browser check only | three.js copes with each by itself; nothing to act on |
+
+Running out of memory during a render or a save is said in those words, next
+to the button that was pressed, as every render and save error already was.
+
+**Cannot be detected:** whether a model will fit in graphics memory before it
+is loaded; whether a download was actually saved; slowness on a weak but real
+graphics card; driver bugs that draw wrong pixels; *which* setting is
+altering pixels; the real graphics card name where the browser masks it; a
+stale cache that happens not to break anything (serve.py prevents that); and
+anything about how a viewer's player will time the finished GIF.
 
 ## Supported input
 
@@ -320,11 +376,42 @@ and only where there is a texture for them to crush.
 **Colour space.** A colour map holds sRGB data by definition, but ColladaLoader
 sets no colour space at all, which renders washed out.
 
+**Collada texture coordinates.** 3ds Max's ColladaMax exporter writes its map
+channel as coordinate set 1. ColladaLoader files set 1 under `uv1`, but every
+three.js map samples `uv` unless told otherwise, so each texture was drawn from
+coordinates that did not exist and came out as a smear of one texel. That is
+the whole of "the OBJ works but the DAE doesn't" for Shadow and Midna: the
+.obj carries the same coordinates as plain `vt`. A mesh whose only coordinates
+are set 1 now draws from them.
+
+**Collada wrap modes.** A COLLADA sampler declares how its texture wraps —
+`WRAP`, `MIRROR`, `CLAMP` — and ColladaLoader reads none of it, repeating every
+texture regardless. Toad's spots are a quarter circle meant to be *mirrored*
+into a whole one; repeated, they came out as a grid of quarters. Each sampler's
+declared wrap is now applied, except where the loader already followed a MAYA
+`<extra>` technique that says otherwise. Both Collada repairs are applied to
+what the vendored loader returns, which is left unmodified.
+
+**Blended models that draw their own insides.** GLTFLoader turns depth writing
+off for every alpha-blended material. That is right for a pane of glass and
+wrong for the common export that marks a *whole model* as blended because one
+corner of its atlas is translucent — the inside of the Canon's viewfinder then
+draws straight through its housing. Physical materials keep depth writing on,
+as Classic always has.
+
+**Texture sets.** When a zip's colour map has to be matched to a material by
+name, the rest of its set — normal, roughness, metalness, occlusion, emissive
+maps sharing the same stem, `_COL_`/`_NRML_`/`_ROUGH_` and the like — is
+attached with it, and Auto then draws the model Physical. Glossiness maps are
+left out (they are roughness inverted), as are opacity and height maps.
+
 Two things are deliberately *not* repaired, because there is no honest rule for
 them. **Vertex colours** are ambiguous in these exports — sometimes they carry
 the model's actual colour, sometimes baked shading that double-darkens the
 texture it multiplies — so they are applied as the file asks and noted in the
-info line. And where a bundle ships several exports of the same model, only an
+info line. When they turn out to be wrong, the **Vertex colours** switch under
+*Layers & debug* takes them out: the Canon's FBX carries a Blender ID mask of
+pure red, yellow and blue that otherwise paints the whole camera. And where a bundle ships several exports of the same model, only an
 obvious derived variant (`_bake`, `_LOD3`, `collision`) is pushed down the
 ranking; choosing between the rest is what the Advanced panel is for.
 
@@ -378,6 +465,152 @@ is forced off while frames are rendered, so it can never appear in an export.
 Note that **Yaw and Start rotation look identical while the model is centred** —
 both turn it about Y. They diverge once X/Z is non-zero: yaw turns the model in
 place, Start rotation carries it around the pivot.
+
+## Background
+
+The Image section's **Background** is one of three:
+
+- **Transparent** (the default) — nothing is painted under the render; the
+  preview shows the checkerboard and the export keeps its alpha.
+- **Solid colour** — a colour fills the whole frame, On Top's band included.
+- **Image** — a JPEG, PNG, WebP or BMP under the render, with **Size**,
+  **Up / down** and **Left / right** sliders that all start in the middle.
+
+A picture is fitted to the image's **height** at 100%, so a wide photo on a
+square image loses its left and right sides and a tall one leaves clear strips
+down either side. Wherever the picture does not reach stays transparent. The
+two position sliders run to ±100, where the picture has just slid off that
+edge; the range scales with the picture's size, so a zoomed-in picture can
+still be panned all the way to either of its own edges.
+
+Everything is a fraction of the image, never a pixel count, so changing Width
+and Height keeps the picture's relative size and place. One function,
+`placeBackdrop()` in [src/backdrop.js](src/backdrop.js), decides where it goes:
+the export draws from its answer, and the preview places an `<img>` in
+percentages of the same answer, so the two cannot drift apart. The picture
+belongs to the render: in On Top mode it sits under the render, not under the
+white band above it. A GIF with a picture background keeps its transparency index,
+since the picture may leave parts of the frame uncovered.
+
+## Rendering
+
+**Quality** (render supersampling) lives at the top of this section and is
+reset along with it.
+
+### Two ways to draw a material
+
+The **Materials** dropdown chooses between three.js's two lighting models.
+
+| Choice | What it draws | Suits |
+| --- | --- | --- |
+| **Physical (PBR)** | the file's own materials, every layer intact, lit by an environment as well as the lights | glTF, USDZ, modern FBX |
+| **Classic (Phong)** | colour and colour map only, Blinn-Phong, no environment | ripped game models, OBJ, Collada |
+| **Auto** (default) | Physical when the model ships physically based materials, Classic when it does not | — |
+
+The note under the dropdown says what Auto chose. Classic is the renderer this
+app has always had, kept exactly — a model that looked right before still looks
+the same. Physical is what fixes the models that did not:
+
+- **Metal went black.** A fully metallic surface has no diffuse colour at all;
+  everything it shows is a reflection. Lit by three lights and nothing else it
+  reflects three points and black between them, which is why the Canon AT-1
+  rendered nearly black. Physical materials reflect an **environment** as well.
+- **Colour that lived in emission went black.** The Mii's colours are all
+  emissive, over a black base colour. Classic keeps the base colour and drops
+  emission; Physical keeps both.
+- **Normal, roughness, metalness, occlusion and clearcoat maps were ignored.**
+  Classic draws a colour map and nothing else.
+
+Forcing Physical on a Classic model upgrades each Phong or Lambert material to
+a non-metallic `MeshStandardMaterial` with every map it carries and a roughness
+matched to its shininess. Forcing Classic on a physical model draws it the old
+way, flat.
+
+### Environment, tone mapping and exposure
+
+**Environment** is what reflective surfaces reflect: **Studio**, a grey room
+with softboxes, for crisp product-shot highlights; **Soft sky**, a plain
+gradient with no hard reflections; or **None**. Both are small three.js scenes
+baked through `PMREMGenerator` when first chosen — nothing is downloaded.
+**Env. strength** scales it and **Env. rotation** turns it, which moves every
+reflection across the model.
+
+While an environment lights the model it also *replaces* the **Ambient**
+slider's hemisphere light, and that slider is hidden. Both are light arriving
+from every direction; counting it twice washed every painted surface out. The
+default strength of 0.7 was measured rather than picked: with it, the shrimp's
+average colour on its model pixels is within a few levels of its Classic
+render, while the Canon's bare chrome still reads bright. The environment is used by Physical materials
+only. three.js would hand it to Phong materials too, as a mirror reflection
+mixed into their colour, and every Classic model would change, so on that path
+there is none — and its controls are hidden.
+
+**Tone mapping** brings brightness beyond white back into range. **Auto** is
+Khronos PBR **Neutral** for Physical — chosen because it leaves colours below
+about 80% brightness alone, so a base colour stays the colour it was authored —
+and **None** for Classic, which is again what keeps Classic identical to the
+old renderer. **AgX**, **ACES Filmic**, **Reinhard** and **Cineon** are there
+for a filmic look. **Exposure** scales the light before tone mapping.
+
+Under Physical, **Reflectivity** and **Highlight size** are hidden: they are
+Phong's own two knobs, and a physically based material carries its gloss in its
+roughness instead.
+
+### Lights & shadows
+
+The **Ambient**, **Key**, **Fill** and **Rim** sliders work on both paths. The
+*Lights & shadows* disclosure places the key and fill: an **angle** around the
+view (0° is from the camera, positive to the right) and a **height** above it.
+The lights ride with the camera, as they always have, so the model turns under
+them. The defaults are the long-standing directions to the last decimal, which
+is why they read 29° and −40° rather than round numbers. Each light, and the
+ambient, also takes a **colour**.
+
+**Shadows** come from the key light: **On the model** for self-shadowing, or
+**On the model and a floor**, which adds a floor that shows nothing *but* the
+shadow — it is transparent everywhere the light reaches, so it works on a
+transparent export and sits correctly over any background. The floor goes
+under the model's lowest point, measured vertex by vertex; spinning about a
+vertical axis never changes a point's height, so it is placed once rather than
+chasing the spin. **Floor shadow** sets its darkness.
+
+### Layers & debug
+
+For looking at a material one part at a time. **Show** swaps the lit render
+for a single channel, drawn unlit and without tone mapping:
+
+| View | What it is |
+| --- | --- |
+| Base colour | colour × colour map × vertex colours |
+| Normals | the surface normal after the normal or bump map, as colour |
+| Metalness, Roughness, Ambient occlusion | the factor × its map's channel, as grey |
+| Emission | emissive colour × emissive map |
+| Opacity | the alpha the lit shader would use, as grey |
+| Wireframe | every triangle's edges |
+
+glTF packs occlusion, roughness and metalness into the red, green and blue of
+one texture, and no stock three.js material can show one channel of a texture
+— so those three views are `MeshBasicMaterial` with a one-line swizzle. Data
+views show the stored number: a roughness of 0.5 is 50% grey, not the brighter
+grey an sRGB output would otherwise make of it. Every other view is a stock
+material handed the right map.
+
+The checkboxes take a layer out of the ordinary render: **Base colour map**,
+**Vertex colours**, **Normal & bump maps**, **Metalness & roughness maps**,
+**Emission**, **Ambient occlusion**, **Light map**, **Transparency** and
+**Clearcoat, sheen & transmission**. Each shows how many of the model's
+materials use it, and one that nothing uses is greyed out. Switching a layer
+back on is exact — every material's full state is recorded before the first
+switch, and restored from that record rather than from wherever the last
+change left it. Switches survive loading another model, and **Reset to
+defaults** turns them all back on.
+
+**Normal strength** and **Emission strength** scale those two layers.
+**Texture filtering** is **Smooth** (the loader's choice), **Sharp**, which
+adds anisotropic filtering for surfaces seen at a glancing angle, or
+**Pixelated**, which samples the nearest texel — an 8×8 console texture drawn
+as eight clear blocks. **Double-sided** draws the back of every face, as the
+app always has; off, each material is drawn as its file says.
 
 ## Preview
 
@@ -467,8 +700,8 @@ where the render covered the caption completely with nothing the caption code
 could do about it. It works because
 [the background is a layer](#the-background-is-a-layer-not-a-clear-colour)
 rather than the renderer's clear colour: Behind's text is imprinted on that
-coloured layer, and Background and Transparent go on meaning exactly what they
-say.
+coloured layer (or picture), and the Background setting goes on meaning
+exactly what it says.
 
 In the preview it is one CSS class, which lifts the render above the caption
 in the same grid cell.
@@ -672,12 +905,11 @@ formats are built from that store only when you hit Save. This matters:
 
 ### The background is a layer, not a clear colour
 
-`SpinScene.render()` always clears fully transparent, whatever Background and
-Transparent are set to. The colour is painted *underneath* the render by
-whoever composes the frame — a `fillRect` in `makeResolver()`, a `#backdrop`
-div under the canvases in the preview. `settings.transparent` still decides
-whether that layer is painted; it just no longer decides it inside the
-renderer.
+`SpinScene.render()` always clears fully transparent, whatever Background is
+set to. The colour is painted *underneath* the render by whoever composes the
+frame — `drawBackdrop()` in `makeResolver()`, a `#backdrop` div under the
+canvases in the preview. The Background setting still decides whether that
+layer is painted; it just no longer decides it inside the renderer.
 
 It used to clear to the colour, which made the background the bottom-most
 thing in the image and left nothing that could ever be placed under it. Making
@@ -770,13 +1002,19 @@ Pages on every push to `main`. Enable it once under
 
 ```
 index.html            markup and the import map
+src/preflight.js      browser checks and error displays, run before the app
+serve.py              local server that stops browsers caching stale modules
 src/style.css         layout, including the mobile breakpoint
 src/main.js           wiring: controls -> scene -> frame store -> exports
-src/scene.js          three.js scene, framing, lights
+src/scene.js          three.js scene, framing, lights, shadows
 src/loaders.js        format dispatch
 src/archive.js        the zip hunter: flatten, pick a model, find its textures
+src/materials.js      Classic and Physical materials, layer switches, debug views
+src/environment.js    the Studio and Soft sky environments, baked with PMREM
 src/mtl-fix.js        one .mtl repair, kept DOM-free so it can be tested
+src/dae-fix.js        the two Collada repairs
 src/capture.js        the frame store
+src/backdrop.js       where a background picture goes, for preview and export
 src/encoders/
   timing.js           delay grid + loop angles
   png.js              fast PNG encoder + shared chunk helpers

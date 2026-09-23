@@ -10,6 +10,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import vm from 'vm';
 
 import { frameDelaysMs, loopSummary, frameAngles, roundHalfToEven,
          frameStarts, frameIndexAt } from '../src/encoders/timing.js';
@@ -23,6 +24,12 @@ import { labelMeshes, toggleLabel, meshSummary } from '../src/mesh-list.js';
 import { fontPx, strokePx, wrapLines, layoutText, drawText, isBlank, MS_ACROSS,
          usableWidth, fontBasis, layoutBand, drawBand } from '../src/overlay-text.js';
 import { zipSync, strToU8 } from '../vendor/fflate.module.js';
+import * as THREE from '../vendor/three/three.module.js';
+import { toClassic, toPhysical, applyLayers, layersOf, debugMaterial, applyFiltering,
+         shininessToRoughness, wantsPhysical, ALL_LAYERS_ON, LAYERS, VIEWS } from '../src/materials.js';
+import { wrapModeFor, samplerWraps, applySamplerWraps, promoteOnlyUvSet } from '../src/dae-fix.js';
+import { setKeyOf } from '../src/archive.js';
+import { placeBackdrop, drawBackdrop } from '../src/backdrop.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const OUT = join(here, 'out');
@@ -750,6 +757,481 @@ for (const f of faces) {
       && readFileSync(join(root, 'vendor/fonts', x), 'utf8')
         .toLowerCase().includes(f.family.toLowerCase().replace(' ', ''))
       || readdirSync(join(root, 'vendor/fonts')).includes(`OFL-${f.family.replace(' ', '')}.txt`)));
+}
+
+/* ------------------------------------------------------------ materials */
+
+console.log('\nmaterials: the two paths');
+{
+  const mesh = new THREE.Mesh(new THREE.BufferGeometry());
+  const map = new THREE.Texture();
+  const normalMap = new THREE.Texture();
+  const pbr = new THREE.MeshStandardMaterial({ map, normalMap, emissive: 0xff0000 });
+  const classic = toClassic(pbr, mesh, { shininess: 40, specular: 0 });
+  check('Classic is Phong', classic.isMeshPhongMaterial);
+  check('Classic keeps the colour map', classic.map === map);
+  // The point of Classic: it is the old renderer, so it must *not* grow maps.
+  check('Classic drops the normal map, as it always has', !classic.normalMap);
+  check('Classic drops emission, as it always has', classic.emissive.getHex() === 0);
+  check('Physical uses a PBR source as it is', toPhysical(pbr, mesh) === pbr);
+  const unlit = new THREE.MeshBasicMaterial();
+  check('an unlit source stays unlit', toPhysical(unlit, mesh) === unlit);
+
+  const phong = new THREE.MeshPhongMaterial({ map, normalMap, shininess: 30,
+    emissive: 0x00ff00, alphaMap: new THREE.Texture() });
+  const upgraded = toPhysical(phong, mesh);
+  check('Phong upgrades to Standard', upgraded.isMeshStandardMaterial && upgraded !== phong);
+  check('upgrade keeps the colour map', upgraded.map === map);
+  check('upgrade keeps the normal map', upgraded.normalMap === normalMap);
+  check('upgrade keeps emission', upgraded.emissive.getHex() === 0x00ff00);
+  check('upgrade is a non-metal', upgraded.metalness === 0);
+  check('upgrade does not take the MTL alpha map', !upgraded.alphaMap);
+  check('glossier Phong is smoother', shininessToRoughness(200) < shininessToRoughness(10));
+  check('roughness stays in range', shininessToRoughness(0) <= 1 && shininessToRoughness(1e6) >= 0.04);
+
+  const set = new THREE.MeshPhongMaterial({ map });
+  set.roughnessMap = new THREE.Texture();
+  set.metalnessMap = new THREE.Texture();
+  set.userData.textureSet = true;
+  const fromSet = toPhysical(set, mesh);
+  check('a found texture set carries its data maps',
+    fromSet.roughnessMap === set.roughnessMap && fromSet.metalnessMap === set.metalnessMap);
+  check('a metalness map drives metalness fully', fromSet.metalness === 1 && fromSet.roughness === 1);
+  check('a found set asks for Physical', wantsPhysical(set) && !wantsPhysical(new THREE.MeshPhongMaterial()));
+}
+
+console.log('\nmaterials: layer switches');
+{
+  const map = new THREE.Texture();
+  const normalMap = new THREE.Texture();
+  const m = new THREE.MeshStandardMaterial({ map, normalMap, emissive: 0x404040,
+    emissiveIntensity: 2, transparent: true, opacity: 0.5, alphaTest: 0.1 });
+  m.normalScale.set(1, -1);
+  check('reports the layers it uses',
+    layersOf(m).join() === 'map,normal,emission,alpha', layersOf(m).join());
+
+  const v0 = m.version;
+  applyLayers(m, ALL_LAYERS_ON);
+  check('all on changes nothing', m.map === map && m.normalMap === normalMap && m.opacity === 0.5);
+  check('all on does not recompile', m.version === v0);
+
+  applyLayers(m, { ...ALL_LAYERS_ON, map: false, normal: false, emission: false, alpha: false });
+  check('colour map off', m.map === null);
+  check('normal map off', m.normalMap === null);
+  check('emission off', m.emissiveIntensity === 0);
+  check('transparency off', !m.transparent && m.opacity === 1 && m.alphaTest === 0);
+  check('a switched-off layer still counts as present', layersOf(m).includes('map'));
+  check('removing a map recompiles', m.version > v0);
+
+  applyLayers(m, ALL_LAYERS_ON, { normalStrength: 2, emissionStrength: 3 });
+  check('back on is exact', m.map === map && m.normalMap === normalMap
+    && m.transparent && m.opacity === 0.5 && m.alphaTest === 0.1);
+  check('strengths multiply the original, not the last value',
+    m.emissiveIntensity === 6 && m.normalScale.x === 2 && m.normalScale.y === -2);
+  const v1 = m.version;
+  applyLayers(m, ALL_LAYERS_ON, { normalStrength: 0.5, emissionStrength: 1 });
+  check('a strength alone does not recompile', m.version === v1);
+  check('strength applied again from the snapshot', m.emissiveIntensity === 2 && m.normalScale.x === 0.5);
+
+  const phong = new THREE.MeshPhongMaterial();
+  applyLayers(phong, { ...ALL_LAYERS_ON, metalRough: false });
+  check('switches a material lacks are ignored', !('metalnessMap' in phong));
+  check('every layer has a label and a test', LAYERS.every((l) => l.label && typeof l.has === 'function'));
+}
+
+console.log('\nmaterials: debug views');
+{
+  const map = new THREE.Texture();
+  const rough = new THREE.Texture();
+  const m = new THREE.MeshStandardMaterial({ map, roughnessMap: rough, roughness: 0.5,
+    emissive: 0x112233, emissiveMap: new THREE.Texture(), normalMap: new THREE.Texture() });
+  check('final is the material itself', debugMaterial(m, 'final') === m);
+  const albedo = debugMaterial(m, 'albedo');
+  check('base colour is unlit and carries the map', albedo.isMeshBasicMaterial && albedo.map === map);
+  check('debug views are not tone mapped', !albedo.toneMapped);
+  const normals = debugMaterial(m, 'normals');
+  check('normals view uses the normal map', normals.isMeshNormalMaterial && normals.normalMap === m.normalMap);
+  const roughness = debugMaterial(m, 'roughness');
+  check('roughness view samples the roughness map', roughness.map === rough);
+  check('channel views compile per channel',
+    roughness.customProgramCacheKey() !== debugMaterial(m, 'metalness').customProgramCacheKey());
+  check('emission view carries the emissive map', debugMaterial(m, 'emission').map === m.emissiveMap);
+  check('wireframe is a wireframe', debugMaterial(m, 'wireframe').wireframe === true);
+  check('every view builds', VIEWS.every((v) => debugMaterial(m, v)));
+}
+
+console.log('\nmaterials: filtering');
+{
+  const t = new THREE.Texture();
+  const before = [t.magFilter, t.minFilter, t.anisotropy];
+  applyFiltering(t, 'pixel', 16);
+  check('pixelated samples the nearest texel', t.magFilter === THREE.NearestFilter);
+  applyFiltering(t, 'sharp', 16);
+  check('sharp raises anisotropy', t.anisotropy === 16 && t.magFilter === before[0]);
+  applyFiltering(t, 'smooth', 16);
+  check('smooth restores the loader\'s choice exactly',
+    t.magFilter === before[0] && t.minFilter === before[1] && t.anisotropy === before[2]);
+}
+
+/* ------------------------------------------------------------- collada */
+
+console.log('\ncollada: sampler wrap modes');
+check('WRAP repeats', wrapModeFor('WRAP') === THREE.RepeatWrapping);
+check('MIRROR mirrors', wrapModeFor('MIRROR') === THREE.MirroredRepeatWrapping);
+check('CLAMP clamps', wrapModeFor(' clamp ') === THREE.ClampToEdgeWrapping);
+check('BORDER clamps', wrapModeFor('BORDER') === THREE.ClampToEdgeWrapping);
+check('nonsense is ignored', wrapModeFor('SIDEWAYS') === null && wrapModeFor(undefined) === null);
+{
+  // The shape of the Toad file: one clamped sampler, one mirrored.
+  const dae = `<COLLADA><library_effects>
+    <effect id="Effect_Material0"><profile_COMMON>
+      <newparam sid="surface_0"><surface type="2D"><init_from>Texture0</init_from></surface></newparam>
+      <newparam sid="sampler_0"><sampler2D><source>surface_0</source>
+        <wrap_s>CLAMP</wrap_s><wrap_t>CLAMP</wrap_t></sampler2D></newparam>
+      <technique sid="common"><phong><diffuse><texture texture="sampler_0" texcoord="CHANNEL0"/></diffuse></phong></technique>
+    </profile_COMMON></effect>
+    <effect id="Effect_Material6"><profile_COMMON>
+      <newparam sid="sampler_6"><sampler2D><source>surface_6</source>
+        <wrap_s>MIRROR</wrap_s><wrap_t>MIRROR</wrap_t></sampler2D></newparam>
+    </profile_COMMON></effect>
+    <effect id="Effect_NoWrap"><profile_COMMON>
+      <newparam sid="sampler_x"><sampler2D><source>surface_x</source></sampler2D></newparam>
+    </profile_COMMON></effect>
+  </library_effects></COLLADA>`;
+  const wraps = samplerWraps(dae);
+  check('reads each sampler', wraps.size === 2, `got ${wraps.size}`);
+  check('keyed by effect and sampler',
+    wraps.get('Effect_Material6|sampler_6')?.s === THREE.MirroredRepeatWrapping);
+  check('a clamped sampler clamps',
+    wraps.get('Effect_Material0|sampler_0')?.t === THREE.ClampToEdgeWrapping);
+  check('a sampler that says nothing is left out', !wraps.has('Effect_NoWrap|sampler_x'));
+
+  // What ColladaLoader.parse() hands back, reduced to the parts that matter.
+  const texture = new THREE.Texture();
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;       // the loader's blanket default
+  const kept = new THREE.Texture();
+  kept.wrapS = kept.wrapT = THREE.ClampToEdgeWrapping;         // set by a MAYA technique
+  const library = {
+    materials: {
+      a: { url: 'Effect_Material0', build: new THREE.MeshPhongMaterial({ map: texture }) },
+      b: { url: 'Effect_Material6', build: new THREE.MeshPhongMaterial({ map: kept }) },
+    },
+    effects: {
+      Effect_Material0: { profile: { technique: { parameters: {
+        diffuse: { texture: { id: 'sampler_0' } } } } } },
+      Effect_Material6: { profile: { technique: { parameters: {
+        diffuse: { texture: { id: 'sampler_6', extra: { technique: { wrapU: 0 } } } } } } } },
+    },
+  };
+  const changed = applySamplerWraps({ library }, dae);
+  check('the declared wrap replaces the loader default', texture.wrapS === THREE.ClampToEdgeWrapping);
+  check('a MAYA technique the loader honoured is left alone', kept.wrapS === THREE.ClampToEdgeWrapping);
+  check('reports what it changed', changed === 1, `got ${changed}`);
+  check('nothing to do is not an error', applySamplerWraps(null, dae) === 0);
+}
+
+console.log('\ncollada: coordinate sets');
+{
+  const onlySet1 = new THREE.BufferGeometry();
+  onlySet1.setAttribute('uv1', new THREE.Float32BufferAttribute([0, 0, 1, 1], 2));
+  const both = new THREE.BufferGeometry();
+  both.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0], 2));
+  both.setAttribute('uv1', new THREE.Float32BufferAttribute([1, 1], 2));
+  const root = new THREE.Group();
+  root.add(new THREE.Mesh(onlySet1), new THREE.Mesh(both));
+  const promoted = promoteOnlyUvSet(root);
+  check('a mesh with only set 1 draws from it', onlySet1.attributes.uv === onlySet1.attributes.uv1);
+  check('a mesh with set 0 is left alone', both.attributes.uv.getX(0) === 0);
+  check('counts what it promoted', promoted === 1);
+}
+
+console.log('\narchive: texture sets');
+check('colour and normal share a set',
+  setKeyOf('t/#CAM0001_Textures_COL_4k.png') === setKeyOf('t/#CAM0001_Textures_NRML_4k.png'));
+check('roughness joins the set',
+  setKeyOf('t/#CAM0001_Textures_COL_4k.png') === setKeyOf('t/#CAM0001_Textures_ROUGH_4k.png'));
+check('occlusion joins the set',
+  setKeyOf('t/#CAM0001_Textures_COL_4k.png') === setKeyOf('t/#CAM0001_Textures_AO_4k.png'));
+check('glTF-style names pair up',
+  setKeyOf('hull_01_baseColor.png') === setKeyOf('hull_01_normal.png'));
+check('a different set does not pair',
+  setKeyOf('hull_01_baseColor.png') !== setKeyOf('hull_02_normal.png'));
+
+console.log('\nbackground picture');
+{
+  const near = (a, b) => Math.abs(a - b) < 1e-9;
+  // A 16:9 picture on a square image: fits the height, sides cut off equally.
+  const wide = placeBackdrop(1920, 1080, 480, 480);
+  check('fits the height by default', near(wide.height, 480) && near(wide.y, 0));
+  check('a wide picture overhangs both sides equally',
+    near(wide.width, 480 * 16 / 9) && near(wide.x, (480 - wide.width) / 2) && wide.x < 0);
+
+  // A tall picture leaves clear strips either side.
+  const tall = placeBackdrop(500, 1000, 480, 480);
+  check('a narrow picture leaves the sides uncovered',
+    near(tall.width, 240) && near(tall.x, 120));
+
+  // Relative everything: doubling the image doubles every number.
+  const opts = { size: 140, x: 30, y: -45 };
+  const a = placeBackdrop(1920, 1080, 480, 320, opts);
+  const b = placeBackdrop(1920, 1080, 960, 640, opts);
+  check('keeps its relative size and place when the image is resized',
+    near(b.x, a.x * 2) && near(b.y, a.y * 2) && near(b.width, a.width * 2)
+    && near(b.height, a.height * 2));
+
+  check('size is a percentage of the fitted size',
+    near(placeBackdrop(100, 100, 480, 480, { size: 50 }).height, 240));
+  check('size 0 draws nothing', placeBackdrop(100, 100, 480, 480, { size: 0 }).width === 0);
+
+  const right = placeBackdrop(1000, 1000, 480, 480, { x: 100 });
+  const up = placeBackdrop(1000, 1000, 480, 480, { y: 100 });
+  check('+100 across slides it just off the right edge', near(right.x, 480));
+  check('+100 up slides it just off the top edge', near(up.y + up.height, 0));
+  const zoomed = placeBackdrop(1000, 1000, 480, 480, { size: 400, x: -100 });
+  check('a zoomed picture can still be panned past its own edge',
+    near(zoomed.x + zoomed.width, 0));
+
+  // drawBackdrop: what reaches the context.
+  const calls = [];
+  const ctx = {
+    save: () => calls.push('save'), restore: () => calls.push('restore'),
+    beginPath() {}, clip: () => calls.push('clip'),
+    rect: (...r) => calls.push(['rect', ...r]),
+    fillRect: (...r) => calls.push(['fillRect', ...r]),
+    drawImage: (img, ...r) => calls.push(['drawImage', ...r]),
+    set fillStyle(v) { calls.push(['fillStyle', v]); },
+  };
+  drawBackdrop(ctx, null, { width: 480, height: 480 });
+  check('no background draws nothing', calls.length === 0);
+  drawBackdrop(ctx, { colour: '#123456' }, { width: 480, height: 480, top: 90, total: 570 });
+  check('a colour fills the whole frame, band included',
+    JSON.stringify(calls) === JSON.stringify([['fillStyle', '#123456'], ['fillRect', 0, 0, 480, 570]]));
+  calls.length = 0;
+  drawBackdrop(ctx, { image: { width: 1000, height: 1000 }, size: 100, x: 0, y: 0 },
+    { width: 480, height: 480, top: 90, total: 570 });
+  const draw = calls.find((c) => c[0] === 'drawImage');
+  check('a picture sits in the render, below the band, clipped to it',
+    JSON.stringify(draw) === JSON.stringify(['drawImage', 0, 90, 480, 480])
+    && calls.some((c) => c[0] === 'rect' && c[2] === 90 && c[4] === 480) && calls.includes('clip'));
+}
+
+console.log('\npreflight');
+{
+  const source = readFileSync(join(root, 'src', 'preflight.js'), 'utf8');
+
+  // Just enough of a browser to run src/preflight.js: elements that hold
+  // text and children, canvases whose answers each test chooses, and a
+  // window whose events the test fires by hand.
+  function makeBrowser(opts = {}) {
+    const o = { protocol: 'http:', importMaps: true, webgl2: true, webgl1: true,
+      fast: true, offscreen: true, imageBitmap: true, readback: 'ok', ...opts };
+    const byId = (node, id) => {
+      if (node.attrs?.id === id) return node;
+      for (const child of node.children ?? []) {
+        const hit = byId(child, id);
+        if (hit) return hit;
+      }
+      return null;
+    };
+    const textOf = (node) => (node.text ?? '') + (node.children ?? []).map(textOf).join('');
+    const make2d = () => {
+      const pixels = new Uint8ClampedArray(64);
+      let fill = [0, 0, 0];
+      return {
+        set fillStyle(v) { fill = v.match(/\d+/g).map(Number); },
+        fillRect(x, y) { pixels.set([...fill, 255], (y * 4 + x) * 4); },
+        getImageData() {
+          if (o.readback === 'throw') throw new Error('SecurityError');
+          const data = Uint8ClampedArray.from(pixels);
+          if (o.readback === 'noise') data[5] += 1;
+          if (o.readback === 'blank') data.fill(255);
+          return { data };
+        },
+      };
+    };
+    const makeElement = (tag) => {
+      const node = {
+        tagName: tag.toUpperCase(), attrs: {}, children: [], parentNode: null,
+        style: {}, listeners: {}, text: '',
+        set textContent(v) { this.text = String(v); this.children = []; },
+        get textContent() { return textOf(this); },
+        setAttribute(k, v) { this.attrs[k] = String(v); },
+        getAttribute(k) { return this.attrs[k] ?? null; },
+        appendChild(child) { child.parentNode = this; this.children.push(child); return child; },
+        removeChild(child) { this.children = this.children.filter((c) => c !== child); child.parentNode = null; },
+        addEventListener(type, fn) { (this.listeners[type] ??= []).push(fn); },
+        querySelectorAll(sel) {
+          const cls = sel.replace('.', '');
+          const out = [];
+          const walk = (n) => { for (const c of n.children) { if ((c.attrs.class ?? '').split(' ').includes(cls)) out.push(c); walk(c); } };
+          walk(this);
+          return out;
+        },
+        focus() {},
+      };
+      if (tag === 'canvas') {
+        node.getContext = (kind, attributes) => {
+          if (kind === '2d') return make2d();
+          const ok = kind === 'webgl2' ? o.webgl2 && (!attributes?.failIfMajorPerformanceCaveat || o.fast)
+            : kind === 'webgl' ? o.webgl1 : false;
+          if (!ok) {
+            for (const fn of node.listeners.webglcontextcreationerror ?? []) fn({ statusMessage: 'blocklisted' });
+            return null;
+          }
+          return { RENDERER: 1, getExtension: () => null, getParameter: () => 'Fake GPU' };
+        };
+      }
+      return node;
+    };
+    const body = makeElement('body');
+    const alerts = makeElement('div'); alerts.setAttribute('id', 'alerts'); body.appendChild(alerts);
+    const document = {
+      body,
+      createElement: makeElement,
+      getElementById: (id) => byId(body, id),
+      listeners: {},
+      addEventListener(type, fn) { (this.listeners[type] ??= []).push(fn); },
+      removeEventListener() {},
+    };
+    const window = {
+      document,
+      location: { protocol: o.protocol, origin: 'http://localhost:8000', host: 'localhost:8000' },
+      navigator: { userAgent: 'TestBrowser/1.0' },
+      listeners: {},
+      addEventListener(type, fn) { (this.listeners[type] ??= []).push(fn); },
+      setTimeout: (fn) => fn(),
+      HTMLScriptElement: o.importMaps === null ? {} : { supports: (t) => t === 'importmap' && o.importMaps },
+      createImageBitmap: o.imageBitmap ? () => {} : undefined,
+    };
+    if (o.offscreen) {
+      window.OffscreenCanvas = function () { return { getContext: (k) => (k === '2d' ? make2d() : null) }; };
+    }
+    const fire = (type, event = {}) => { for (const fn of window.listeners[type] ?? []) fn(event); };
+    vm.runInNewContext(source, { window });
+    // Each message under the file browser: its colour and its text.
+    const shown = () => alerts.children.map((a) => ({
+      level: a.children[0].attrs.class === 'warn' ? 'red' : 'orange', text: textOf(a),
+    }));
+    const check = () => { window.Funee.showCheck(); return textOf(document.getElementById('browser-check-panel')); };
+    return { window, document, fire, shown, check, Funee: window.Funee };
+  }
+
+  const { Funee } = makeBrowser();
+  const M = Funee.MESSAGES;
+  const healthy = { protocol: 'http:', importMaps: true, webgl2: true, webgl1: true,
+    software: false, offscreen2d: true, imageBitmap: true, readback: 'ok' };
+  const ids = (f) => JSON.stringify(Funee.checks({ ...healthy, ...f }));
+  check('a healthy browser has no problems', ids({}) === '[]');
+  check('opened from disk is F1', ids({ protocol: 'file:' }) === '["F1"]');
+  check('no import maps is F2', ids({ importMaps: false }) === '["F2"]');
+  check('unknown import-map support is not a failure', ids({ importMaps: null }) === '[]');
+  check('no WebGL at all is F3a', ids({ webgl2: false, webgl1: false }) === '["F3a"]');
+  check('WebGL 1 only is F3b', ids({ webgl2: false, webgl1: true }) === '["F3b"]');
+  check('no OffscreenCanvas is F4', ids({ offscreen2d: false }) === '["F4"]');
+  check('no createImageBitmap is F5', ids({ imageBitmap: false }) === '["F5"]');
+  check('blocked read-back is F6', ids({ readback: 'blocked' }) === '["F6"]');
+  check('software 3D is only a warning', ids({ software: true }) === '["W1"]');
+  check('altered pixels are only a warning', ids({ readback: 'altered' }) === '["W2"]');
+
+  // Start-up, end to end.
+  const only = (b, level) => b.shown().filter((a) => a.level === level);
+  let b = makeBrowser();
+  b.Funee.ready();
+  b.fire('load');
+  check('a started app on a healthy browser shows nothing', b.shown().length === 0);
+  check('nothing is ever a pop-up: no panel until Browser check is asked for',
+    !b.document.getElementById('browser-check-panel'));
+
+  b = makeBrowser();
+  b.fire('error', { message: 'The requested module does not provide <b>setKeyOf</b>',
+    filename: 'http://localhost:8000/src/loaders.js', lineno: 13 });
+  b.fire('error', { target: { src: 'http://localhost:8000/src/main.js', type: 'module' } });
+  b.fire('load');
+  let red = only(b, 'red');
+  check('an app that never called ready() gets one red "did not start"',
+    red.length === 1 && red[0].text.includes(M.F7.title));
+  check('a line is just the headline and a link to the Browser check',
+    red[0].text === M.F7.title + ' Browser check');
+  check('the Browser check holds the explanation',
+    b.check().includes(M.F7.why) && b.check().includes(M.F7.tryText));
+  const report = b.check();
+  check('the error that stopped it is in the Browser check details, as plain text',
+    report.includes('provide <b>setKeyOf</b> (/src/loaders.js:13)'));
+  check('a module that failed to load is named, with its imports',
+    report.includes('Could not load /src/main.js or one of the files it imports'));
+  check('nothing is built from HTML', !/\.innerHTML\b/.test(source));
+
+  b = makeBrowser({ webgl2: false, webgl1: false });
+  b.fire('load');
+  red = only(b, 'red');
+  check('WebGL switched off is reported as that, not as "did not start"',
+    red.length === 1 && red[0].text.includes(M.F3a.title));
+  check("the browser's own reason reaches the Browser check", b.check().includes('WebGL reason: blocklisted'));
+
+  b = makeBrowser({ webgl2: false, webgl1: true });
+  b.fire('load');
+  check('WebGL 1 only is red', only(b, 'red').some((a) => a.text.includes(M.F3b.title)));
+
+  b = makeBrowser({ protocol: 'file:' });
+  b.fire('load');
+  check('opened from disk is red when it stops the start',
+    only(b, 'red').some((a) => a.text.includes(M.F1.title)));
+
+  b = makeBrowser({ protocol: 'file:' });
+  b.Funee.ready();
+  b.fire('load');
+  check('opened from disk is not reported where the app runs anyway (Firefox)', b.shown().length === 0);
+
+  b = makeBrowser({ readback: 'blank' });
+  b.Funee.ready();
+  b.fire('load');
+  check('an image read back as something else is red',
+    only(b, 'red').some((a) => a.text.includes(M.F6.title)));
+
+  b = makeBrowser({ readback: 'noise', fast: false });
+  b.Funee.ready();
+  b.fire('load');
+  check('slow 3D is one orange line', only(b, 'red').length === 0
+    && JSON.stringify(b.shown()) === JSON.stringify([{ level: 'orange', text: M.W1.title + ' Browser check' }]));
+  check('altered pixels are not shown on the page, only explained in the Browser check',
+    !b.shown().some((a) => a.text.includes(M.W2.title))
+    && b.check().includes(M.W2.title) && b.check().includes(M.W2.why));
+
+  b = makeBrowser();
+  b.Funee.ready();
+  b.fire('load');
+  b.Funee.raise('W4');
+  b.Funee.raise('W4');
+  check('a lost feature reported by the app is one orange line',
+    only(b, 'orange').filter((a) => a.text.includes(M.W4.title)).length === 1);
+  b.Funee.contextLost();
+  red = only(b, 'red');
+  check('the graphics card dropping out is one red line',
+    red.length === 1 && red[0].text === M.R1.title + ' Browser check');
+  check('its Reload link is in the Browser check', b.check().includes('Reload the page'));
+
+  b = makeBrowser();
+  b.Funee.ready();
+  b.fire('load');
+  b.fire('error', { message: 'late failure' });
+  b.fire('error', { message: 'another failure' });
+  b.fire('unhandledrejection', { reason: { name: 'AbortError', message: 'aborted' } });
+  check('errors after start-up are one orange line, however many',
+    b.shown().length === 1 && b.shown()[0].level === 'orange' && b.shown()[0].text.includes(M.R3.title));
+  check('each error message is in the Browser check, cancellations are not',
+    b.check().includes('late failure') && b.check().includes('another failure') && !b.check().includes('aborted'));
+
+  // Minor problems appear in the Browser check and nowhere else.
+  b = makeBrowser();
+  b.Funee.ready();
+  b.fire('load');
+  b.Funee.extras = { halfFloat: true, webp: true, maxSamples: 0, antialias: true,
+    maxAnisotropy: 1, maxTextureSize: 2048, oversizedTexture: 4096 };
+  const list = b.check();
+  check('minor problems show only in the Browser check',
+    b.shown().length === 0 && list.includes('❌  Anti-aliased edges')
+    && list.includes('❌  Sharp texture filtering')
+    && list.includes('some are 4096 px, over the 2048 px limit'));
 }
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

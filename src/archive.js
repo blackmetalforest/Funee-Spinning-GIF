@@ -368,10 +368,9 @@ function byDepthThenName(a, b) {
 /**
  * What each texture in a bundle is for, read off its filename.
  *
- * Only the colour map is ever used: the scene replaces every material with
- * MeshPhongMaterial and keeps `map` alone, so hunting down a normal or
- * roughness map would be work thrown away. Classifying them is still needed —
- * to rule them *out* as colour candidates.
+ * Classifying does two jobs. It rules the data maps *out* as colour
+ * candidates, and once a colour map has been matched it finds the rest of
+ * that map's set — see setKeyOf() — for the Physical path to use.
  *
  * Colour is tested last because its words are the least specific: a file
  * called "metallicRoughness" contains neither "albedo" nor "diffuse", but
@@ -393,6 +392,25 @@ export function channelOf(path) {
   const stem = stemOf(path).toLowerCase();
   for (const [name, test] of CHANNEL_TESTS) if (test.test(stem)) return name;
   return 'unknown';
+}
+
+/**
+ * The name of the texture set a file belongs to: its stem with the channel
+ * word taken out. "#CAM0001_Textures_COL_4k" and "#CAM0001_Textures_NRML_4k"
+ * both come out as "cam0001textures4k".
+ *
+ * Whole words are dropped rather than pattern matches cut out, because the
+ * patterns are written to *recognise* a channel, not to delimit it: "_nrm"
+ * finds "_NRML_" first and would leave a stray "l" behind. Each word is
+ * tested with the file's own channel pattern, wrapped in the separators the
+ * patterns expect.
+ */
+export function setKeyOf(path) {
+  const stem = stemOf(path).toLowerCase();
+  const test = CHANNEL_TESTS.find(([, t]) => t.test(stem))?.[1];
+  const words = stem.split(/[\s_.\-]+/).filter(Boolean);
+  const kept = test ? words.filter((word) => !test.test(`_${word}_`)) : words;
+  return normKey(kept.join(''));
 }
 
 /**

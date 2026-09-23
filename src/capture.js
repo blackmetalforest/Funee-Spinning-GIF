@@ -19,6 +19,7 @@
 import { frameAngles } from './encoders/timing.js';
 import { encodePng } from './encoders/png.js';
 import { drawText, drawBand, layoutBand } from './overlay-text.js';
+import { drawBackdrop } from './backdrop.js';
 
 /**
  * Build the composer that turns one rendered frame into one output image.
@@ -31,6 +32,7 @@ import { drawText, drawBand, layoutBand } from './overlay-text.js';
  * The background is painted here rather than by the renderer. The GL clear is
  * always transparent now (see SpinScene.render), so an opaque background is a
  * fillRect underneath everything — which is what lets "Behind" put text on it.
+ * A background picture is drawn the same way, by drawBackdrop().
  *
  * The canvas and its context are reused across frames; allocating a fresh one
  * per frame is measurably slower.
@@ -41,7 +43,7 @@ import { drawText, drawBand, layoutBand } from './overlay-text.js';
  * height keep describing the render, and nothing upstream of here learns that
  * the band exists.
  */
-function makeResolver(width, height, caption, background) {
+function makeResolver(width, height, caption, backdrop) {
   const mode = caption?.mode ?? null;
   const out = new OffscreenCanvas(width, height);
   const ctx = out.getContext('2d', { willReadFrequently: true });
@@ -60,10 +62,7 @@ function makeResolver(width, height, caption, background) {
     ctx.clearRect(0, 0, width, total);
     // Only when the user asked for one: left clear otherwise, so the alpha
     // channel still tells the exporters the truth about what is see-through.
-    if (background) {
-      ctx.fillStyle = background;
-      ctx.fillRect(0, 0, width, total);
-    }
+    drawBackdrop(ctx, backdrop, { width, height, top: band, total });
     // The caption goes on *after* the downsample, at the true output size, so
     // its edges stay sharp instead of being softened along with the render.
     // Here rather than at save time because it belongs to the frame: one
@@ -91,17 +90,20 @@ function makeResolver(width, height, caption, background) {
  * @param {(done:number,total:number)=>boolean} onProgress return false to cancel
  * @param {{mode:string, text:object, band:string, family:string,
  *          weight:number, scale:number}} [caption]
+ * @param {null | {colour:string} | {image:CanvasImageSource, size:number,
+ *          x:number, y:number}} [backdrop] the background layer; see
+ *   drawBackdrop(). Null leaves the frame clear.
  * @returns {Promise<{blobs: Blob[], width: number, height: number} | null>}
  *   `height` is the height of the finished image, which "On Top" makes taller
  *   than the render. Every exporter reads it from here rather than from the
  *   settings, so the band needs no special case downstream.
  */
-export async function captureFrames(scene, spin, onProgress, caption = null) {
+export async function captureFrames(scene, spin, onProgress, caption = null,
+  backdrop = null) {
   const { width, height } = scene.settings;
   const angles = frameAngles(spin.frames, spin.clockwise);
   // The renderer no longer paints the background, so the composer does.
-  const background = scene.settings.transparent ? null : scene.settings.background;
-  const { resolve, height: outHeight } = makeResolver(width, height, caption, background);
+  const { resolve, height: outHeight } = makeResolver(width, height, caption, backdrop);
   const blobs = [];
 
   // The centre-axis guide is a preview aid and must never reach the output.

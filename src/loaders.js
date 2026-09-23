@@ -31,9 +31,10 @@ import { TDSLoader } from '../vendor/three/addons/loaders/TDSLoader.js';
 import { TGALoader } from '../vendor/three/addons/loaders/TGALoader.js';
 import { toCreasedNormals } from '../vendor/three/addons/utils/BufferGeometryUtils.js';
 import {
-  openArchive, baseName, dirName, extOf, stemOf, normKey, channelOf, nameAffinity,
+  openArchive, baseName, dirName, extOf, stemOf, normKey, channelOf, nameAffinity, setKeyOf,
 } from './archive.js';
 import { sanitiseMtl } from './mtl-fix.js';
+import { promoteOnlyUvSet, applySamplerWraps } from './dae-fix.js';
 
 export const SUPPORTED_EXTENSIONS = [
   'glb', 'gltf', 'obj', 'stl', 'ply', 'dae', '3mf', 'fbx', 'usdz', 'vox', '3ds',
@@ -157,7 +158,15 @@ async function parseModel(ext, buffer, ctx) {
       return new PLYLoader().parse(buffer);
     case 'dae': {
       const text = new TextDecoder().decode(buffer);
-      return new ColladaLoader(manager).parse(text, path);
+      const result = new ColladaLoader(manager).parse(text, path);
+      // Two things the file states and the loader does not act on; see
+      // src/dae-fix.js. Done here so everything downstream — the texture
+      // guessing included, which looks for `uv` — sees the repaired model.
+      if (result?.scene) {
+        promoteOnlyUvSet(result.scene);
+        applySamplerWraps(result, text);
+      }
+      return result;
     }
     case '3mf':
       return new ThreeMFLoader(manager).parse(buffer);
@@ -745,17 +754,23 @@ function bindLooseTextures(object, index, manager, report) {
 
   const loader = new THREE.TextureLoader(manager);
   const cache = new Map();
-  const attach = (material, path) => {
+  const load = (path, colour) => {
     let texture = cache.get(path);
     if (!texture) {
       texture = loader.load(path);
-      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.colorSpace = colour ? THREE.SRGBColorSpace : THREE.NoColorSpace;
       texture.flipY = true;               // the convention everywhere but glTF
       cache.set(path, texture);
+    }
+    return texture;
+  };
+  const attach = (material, path) => {
+    if (!cache.has(path)) {
       report.guessed.push({ material: material.name || '(unnamed)', texture: path });
     }
-    material.map = texture;
+    material.map = load(path, true);
     material.needsUpdate = true;
+    attachCompanions(material, path, index, load, report);
   };
 
   // One texture, one material with nowhere else for it to go.
@@ -773,6 +788,57 @@ function bindLooseTextures(object, index, manager, report) {
     }
     if (best && bestScore >= 60) attach(material, best);
   }
+}
+
+/**
+ * The rest of a texture set, found beside the colour map it was matched by.
+ *
+ * Exports that lose their texture references usually lose all of them, and
+ * the files that remain come as a set named after one stem —
+ * "#CAM0001_Textures_COL_4k", "…_NRML_4k", "…_ROUGH_4k". Once the colour map
+ * has been matched, the others are identified by that shared stem rather
+ * than by guessing again, which is what keeps this from pairing a normal map
+ * with the wrong material.
+ *
+ * The maps only draw on the Physical path — Classic uses the colour map alone,
+ * exactly as before — and marking the material is what lets Auto choose
+ * Physical for a model that turns out to have a full set.
+ *
+ * Deliberately left out: glossiness (the inverse of roughness, and wrong if
+ * taken for it), opacity (three.js reads an alpha map's green channel, and
+ * a set's opacity map is often the colour map's alpha restated), and height.
+ */
+const COMPANION_SLOTS = {
+  normal: 'normalMap',
+  roughness: 'roughnessMap',
+  metalness: 'metalnessMap',
+  ao: 'aoMap',
+  emissive: 'emissiveMap',
+};
+
+function attachCompanions(material, colourPath, index, load, report) {
+  const key = setKeyOf(colourPath);
+  const dir = dirName(colourPath);
+  let found = 0;
+  for (const path of index.images()) {
+    if (path === colourPath || dirName(path) !== dir) continue;
+    if (!index.bytes(path)?.length) continue;          // a placeholder, not a texture
+    const channel = channelOf(path);
+    const slot = COMPANION_SLOTS[channel];
+    if (!slot || material[slot] || /gloss/i.test(stemOf(path))) continue;
+    if (setKeyOf(path) !== key) continue;
+    material[slot] = load(path, channel === 'emissive');
+    if (channel === 'emissive' && material.emissive) material.emissive.setScalar(1);
+    report.bound.add(path);
+    found++;
+  }
+  if (!found) return;
+  // With a metalness or roughness map present, the map is the value: the
+  // factors multiply it, so both go to 1 as glTF's defaults do.
+  if (material.metalnessMap) material.metalness = 1;
+  if (material.roughnessMap) material.roughness = 1;
+  material.userData.textureSet = true;
+  material.needsUpdate = true;
 }
 
 /**

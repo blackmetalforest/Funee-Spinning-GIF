@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Funee Spinning GIF Maker</title>
+<!--
+  Checks the browser before the app starts, and says what is wrong if it
+  cannot run. A classic script, first, so it still runs when the app's own
+  modules cannot. See src/preflight.js.
+-->
+<script src="./src/preflight.js"></script>
 <link rel="stylesheet" href="./src/style.css">
 <script type="importmap">
 {
@@ -26,14 +32,16 @@
         picture, which On Top mode makes taller than the render; its grid rows
         are set in JS so the band and the render always scale as one piece.
 
-        Bottom to top: the background colour, the caption, the render — except
-        in Behind mode, where a class swaps the last two. The caption is a 2D
+        Bottom to top: the background colour, the background picture, the
+        caption, the render — except in Behind mode, where a class swaps the
+        last two. The caption is a 2D
         canvas because you cannot draw text into a WebGL context, and it is
         "preview" only in the sense that this element is: captureFrames()
         bakes the very same drawing into every exported frame.
       -->
       <div id="frame">
         <div id="backdrop"></div>
+        <div id="backdrop-art" hidden><img id="backdrop-image" alt=""></div>
         <canvas id="canvas"></canvas>
         <canvas id="overlay"></canvas>
       </div>
@@ -76,6 +84,12 @@
         <input id="file-name" type="text" readonly placeholder="No file loaded">
         <button id="browse">Browse…</button>
       </div>
+      <!--
+        Problems with the browser, written by src/preflight.js: red when the
+        app cannot work, orange when a feature is lost. Anything smaller is
+        listed only under Browser check.
+      -->
+      <div id="alerts"></div>
       <p id="model-info" class="muted small">—</p>
 
       <!--
@@ -180,7 +194,7 @@
       <div class="row actions"><button id="reset-position">Reset to defaults</button></div>
     </section>
 
-    <section class="group">
+    <section class="group" id="image" data-background="transparent">
       <h2>Image</h2>
       <div class="row"><label for="preset">Preset</label>
         <select id="preset">
@@ -196,21 +210,87 @@
         <input type="number" id="height" min="32" max="2000" step="1" value="480"></div>
       <div class="row"><label for="square">Square</label>
         <input type="checkbox" id="square" checked></div>
+      <!--
+        The background layer, under the render and anything drawn Behind it.
+        Only the rows for the chosen kind are shown; the section's
+        data-background attribute, set from main.js, does the hiding.
+      -->
+      <div class="row"><label for="background-mode">Background</label>
+        <select id="background-mode">
+          <option value="transparent" selected>Transparent</option>
+          <option value="solid">Solid colour</option>
+          <option value="image">Image</option>
+        </select></div>
+      <div class="row bg-solid-only"><label for="background">Colour</label>
+        <input type="color" id="background" value="#181a20"></div>
+      <div class="row bg-image-only"><label for="background-browse">Image</label>
+        <span id="background-name" class="muted small">None chosen</span>
+        <button id="background-browse" type="button">Browse…</button></div>
+      <div class="row bg-image-only"><label for="background-size">Size</label>
+        <input type="range" id="background-size" min="0" max="200" step="1" value="100"
+               title="100% fits the picture to the image's height.">
+        <output for="background-size" id="background-size-out">100%</output></div>
+      <div class="row bg-image-only"><label for="background-y">Up / down</label>
+        <input type="range" id="background-y" min="-100" max="100" step="1" value="0">
+        <output for="background-y" id="background-y-out">0</output></div>
+      <div class="row bg-image-only"><label for="background-x">Left / right</label>
+        <input type="range" id="background-x" min="-100" max="100" step="1" value="0">
+        <output for="background-x" id="background-x-out">0</output></div>
+      <input id="background-file" type="file" hidden
+             accept=".jpg,.jpeg,.png,.webp,.bmp,image/jpeg,image/png,image/webp,image/bmp">
+    </section>
+
+    <section class="group" id="rendering">
+      <h2>Rendering</h2>
       <div class="row"><label for="quality">Quality</label>
-        <select id="quality">
+        <select id="quality"
+                title="How many times over each frame is rendered before it is scaled down to size. Smoother edges, slower renders.">
           <option value="1" selected>Fast (MSAA only)</option>
           <option value="2">Good (2× sampling)</option>
           <option value="3">Best (3× sampling)</option>
         </select></div>
-      <div class="row"><label for="background">Background</label>
-        <input type="color" id="background" value="#181a20"></div>
-      <div class="row"><label for="transparent">Transparent</label>
-        <input type="checkbox" id="transparent" checked></div>
-    </section>
-
-    <section class="group">
-      <h2>Rendering</h2>
-      <div class="row"><label for="ambient">Ambient</label>
+      <!--
+        Auto draws a model with its own physically based materials when it has
+        them (glTF, USDZ) and with the Classic Phong path otherwise, which is
+        what every OBJ and Collada rip was tuned against. The note underneath
+        says which one was picked.
+      -->
+      <div class="row"><label for="shading">Materials</label>
+        <select id="shading">
+          <option value="auto" selected>Auto — from the model</option>
+          <option value="physical">Physical (PBR)</option>
+          <option value="classic">Classic (Phong)</option>
+        </select></div>
+      <p id="shading-note" class="muted small"></p>
+      <div class="row pbr-only"><label for="environment">Environment</label>
+        <select id="environment"
+                title="What reflective and metal surfaces reflect. Physical materials only.">
+          <option value="studio" selected>Studio</option>
+          <option value="soft">Soft sky</option>
+          <option value="none">None</option>
+        </select></div>
+      <div class="row pbr-only"><label for="env-intensity">Env. strength</label>
+        <input type="range" id="env-intensity" min="0" max="3" step="0.01" value="0.7">
+        <output for="env-intensity" id="env-intensity-out">0.70</output></div>
+      <div class="row pbr-only"><label for="env-rotation">Env. rotation</label>
+        <input type="range" id="env-rotation" min="0" max="359" step="1" value="0">
+        <output for="env-rotation" id="env-rotation-out">0°</output></div>
+      <div class="row"><label for="tone-mapping">Tone mapping</label>
+        <select id="tone-mapping"
+                title="How brightness beyond white is brought back into range. Auto is Neutral for physical materials and None for Classic.">
+          <option value="auto" selected>Auto</option>
+          <option value="none">None</option>
+          <option value="neutral">Neutral</option>
+          <option value="agx">AgX</option>
+          <option value="aces">ACES Filmic</option>
+          <option value="reinhard">Reinhard</option>
+          <option value="cineon">Cineon</option>
+        </select></div>
+      <div class="row"><label for="exposure">Exposure</label>
+        <input type="range" id="exposure" min="0.1" max="3" step="0.01" value="1">
+        <output for="exposure" id="exposure-out">1.00</output></div>
+      <!-- Hidden while an environment lights the model: it is the ambient then. -->
+      <div class="row hemi-only"><label for="ambient">Ambient</label>
         <input type="range" id="ambient" min="0" max="1" step="0.01" value="0.30">
         <output for="ambient" id="ambient-out">0.30</output></div>
       <div class="row"><label for="key">Key light</label>
@@ -222,12 +302,88 @@
       <div class="row"><label for="rim">Rim light</label>
         <input type="range" id="rim" min="0" max="2" step="0.01" value="0">
         <output for="rim" id="rim-out">0.00</output></div>
-      <div class="row"><label for="specular">Reflectivity</label>
+      <!-- Phong's own two controls; physical materials carry their own gloss. -->
+      <div class="row classic-only"><label for="specular">Reflectivity</label>
         <input type="range" id="specular" min="0" max="1.5" step="0.01" value="0">
         <output for="specular" id="specular-out">0.00</output></div>
-      <div class="row"><label for="shininess">Highlight size</label>
+      <div class="row classic-only"><label for="shininess">Highlight size</label>
         <input type="range" id="shininess" min="1" max="200" step="1" value="40">
         <output for="shininess" id="shininess-out">40</output></div>
+
+      <details class="more" id="lighting-more">
+        <summary>Lights &amp; shadows</summary>
+        <!--
+          Angles are measured around the view — 0° is straight from the camera,
+          positive is to the right — so the lights keep riding with the camera
+          and the model turns under them. The defaults are the long-standing
+          directions, to the last decimal, so they show as fractions.
+        -->
+        <div class="row"><label for="key-azimuth">Key angle</label>
+          <input type="range" id="key-azimuth" min="-180" max="180" step="any" value="28.81">
+          <output for="key-azimuth" id="key-azimuth-out">29°</output></div>
+        <div class="row"><label for="key-height">Key height</label>
+          <input type="range" id="key-height" min="-90" max="90" step="any" value="28.51">
+          <output for="key-height" id="key-height-out">29°</output></div>
+        <div class="row"><label for="key-color">Key colour</label>
+          <input type="color" id="key-color" value="#ffffff"></div>
+        <div class="row"><label for="fill-azimuth">Fill angle</label>
+          <input type="range" id="fill-azimuth" min="-180" max="180" step="any" value="-40.36">
+          <output for="fill-azimuth" id="fill-azimuth-out">-40°</output></div>
+        <div class="row"><label for="fill-height">Fill height</label>
+          <input type="range" id="fill-height" min="-90" max="90" step="any" value="-4.36">
+          <output for="fill-height" id="fill-height-out">-4°</output></div>
+        <div class="row"><label for="fill-color">Fill colour</label>
+          <input type="color" id="fill-color" value="#ffffff"></div>
+        <div class="row hemi-only"><label for="ambient-color">Ambient colour</label>
+          <input type="color" id="ambient-color" value="#ffffff"></div>
+        <div class="row"><label for="shadows">Shadows</label>
+          <select id="shadows"
+                  title="Cast by the key light. The floor shows only the shadow, so it works on a transparent background.">
+            <option value="off" selected>Off</option>
+            <option value="model">On the model</option>
+            <option value="ground">On the model and a floor</option>
+          </select></div>
+        <div class="row"><label for="shadow-darkness">Floor shadow</label>
+          <input type="range" id="shadow-darkness" min="0" max="1" step="0.01" value="0.5">
+          <output for="shadow-darkness" id="shadow-darkness-out">0.50</output></div>
+      </details>
+
+      <details class="more" id="layers-more">
+        <summary>Layers &amp; debug</summary>
+        <!--
+          For looking at one part of a material at a time. The view shows a
+          single channel unlit; the switches take a layer out of the ordinary
+          render. Layers the model does not use are greyed out.
+        -->
+        <div class="row"><label for="debug-view">Show</label>
+          <select id="debug-view">
+            <option value="final" selected>Final render</option>
+            <option value="albedo">Base colour</option>
+            <option value="normals">Normals</option>
+            <option value="metalness">Metalness</option>
+            <option value="roughness">Roughness</option>
+            <option value="ao">Ambient occlusion</option>
+            <option value="emission">Emission</option>
+            <option value="opacity">Opacity</option>
+            <option value="wireframe">Wireframe</option>
+          </select></div>
+        <div id="layer-list"></div>
+        <div class="row"><label for="normal-strength">Normal strength</label>
+          <input type="range" id="normal-strength" min="0" max="3" step="0.01" value="1">
+          <output for="normal-strength" id="normal-strength-out">1.00</output></div>
+        <div class="row"><label for="emission-strength">Emission strength</label>
+          <input type="range" id="emission-strength" min="0" max="5" step="0.01" value="1">
+          <output for="emission-strength" id="emission-strength-out">1.00</output></div>
+        <div class="row"><label for="texture-filter">Texture filtering</label>
+          <select id="texture-filter">
+            <option value="smooth" selected>Smooth</option>
+            <option value="sharp">Sharp (anisotropic)</option>
+            <option value="pixel">Pixelated</option>
+          </select></div>
+        <div class="row"><label for="double-sided">Double-sided</label>
+          <input type="checkbox" id="double-sided" checked
+                 title="Draw the back of every face. Off uses what the file says for each material, which hides faces seen from behind."></div>
+      </details>
       <div class="row actions"><button id="reset-render">Reset to defaults</button></div>
     </section>
 
@@ -315,6 +471,7 @@
 
     <footer class="muted small">
       Everything runs in your browser — models are never uploaded.
+      <button id="browser-check" type="button" class="link">Browser check</button>
     </footer>
   </aside>
 </div>

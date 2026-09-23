@@ -8,10 +8,12 @@
  */
 
 import { SpinScene, DEFAULT_SETTINGS } from './scene.js';
+import { LAYERS } from './materials.js';
 import { loadModel, FILE_ACCEPT, SELF_CONTAINED, AUTO, NONE } from './loaders.js';
 import { baseName, stemOf, extOf, IMAGE_EXTENSIONS } from './archive.js';
 import { labelMeshes, toggleLabel, meshSummary } from './mesh-list.js';
 import { drawText, drawBand, layoutBand, isBlank } from './overlay-text.js';
+import { placeBackdrop } from './backdrop.js';
 import { captureFrames, decodeFrames, storeSize } from './capture.js';
 import { loopSummary, FPS_LIMIT, frameAngles, frameDelaysMs,
          frameStarts, frameIndexAt } from './encoders/timing.js';
@@ -34,11 +36,31 @@ let rendering = false;
 
 const RANGE_IDS = ['elevation', 'start', 'fov', 'zoom', 'speed', 'fps',
   'ambient', 'key', 'fill', 'rim', 'specular', 'shininess',
+  'env-intensity', 'env-rotation', 'exposure',
+  'key-azimuth', 'key-height', 'fill-azimuth', 'fill-height', 'shadow-darkness',
+  'normal-strength', 'emission-strength',
   'pos-x', 'pos-y', 'pos-z', 'pitch', 'yaw', 'roll',
-  'text-stroke', 'text-size'];
+  'text-stroke', 'text-size',
+  'background-size', 'background-x', 'background-y'];
+
+// The Rendering section's choices. Like the Image section's, each one changes
+// what a render produces, so each drops the frame store.
+const RENDER_CHOICE_IDS = ['shading', 'environment', 'tone-mapping', 'key-color',
+  'fill-color', 'ambient-color', 'shadows', 'debug-view', 'texture-filter',
+  'double-sided'];
+
+/*
+ * Which material layers are switched on. Kept here rather than read back from
+ * the checkboxes, because the checkboxes are rebuilt for every model and a
+ * layer switched off for debugging should stay off across a reload.
+ */
+const layerState = Object.fromEntries(LAYERS.map((l) => [l.key, true]));
 
 // Position sliders change the render, so they must also drop the frame store.
 const POSITION_IDS = ['pos-x', 'pos-y', 'pos-z', 'pitch', 'yaw', 'roll'];
+
+// So do the background picture's, which are baked into every frame.
+const PICTURE_IDS = ['background-size', 'background-x', 'background-y'];
 
 const FORMAT_LABELS = { gif: 'GIF', webp: 'WebP', apng: 'APNG', zip: 'ZIP' };
 
@@ -59,15 +81,36 @@ function readSettings() {
     fov: +$('fov').value,
     zoom: +$('zoom').value,
     background: $('background').value,
-    transparent: $('transparent').checked,
-    // No longer a control: textures are always used when a model has them.
-    shadeTexture: true,
+    // Whether anything may be see-through. A picture can leave parts of the
+    // image uncovered, so only a solid colour promises an opaque frame.
+    transparent: $('background-mode').value !== 'solid',
     ambient: +$('ambient').value,
     keyLight: +$('key').value,
     fillLight: +$('fill').value,
     rimLight: +$('rim').value,
     specular: +$('specular').value,
     shininess: +$('shininess').value,
+    shading: $('shading').value,
+    environment: $('environment').value,
+    envIntensity: +$('env-intensity').value,
+    envRotation: +$('env-rotation').value,
+    toneMapping: $('tone-mapping').value,
+    exposure: +$('exposure').value,
+    keyAzimuth: +$('key-azimuth').value,
+    keyHeight: +$('key-height').value,
+    keyColor: $('key-color').value,
+    fillAzimuth: +$('fill-azimuth').value,
+    fillHeight: +$('fill-height').value,
+    fillColor: $('fill-color').value,
+    ambientColor: $('ambient-color').value,
+    shadows: $('shadows').value,
+    shadowDarkness: +$('shadow-darkness').value,
+    view: $('debug-view').value,
+    layers: { ...layerState },
+    normalStrength: +$('normal-strength').value,
+    emissionStrength: +$('emission-strength').value,
+    textureFilter: $('texture-filter').value,
+    doubleSided: $('double-sided').checked,
   };
 }
 
@@ -162,14 +205,51 @@ function readCaption() {
 }
 
 /**
- * The background colour to paint under the render, or null to leave it clear.
+ * The picture chosen for an Image background, decoded once and kept:
+ * `{ bitmap, url, name }`. The bitmap is what the export draws; the object URL
+ * feeds the preview's <img>. Null until something is chosen.
+ */
+let backdropPicture = null;
+
+/**
+ * The background layer to paint under the render, or null to leave it clear.
  *
  * The renderer no longer paints its own background (see SpinScene.render), so
- * this is the single answer to "is there a colour down there", asked by the
- * preview's backdrop div and by the capture's fillRect alike.
+ * this is the single answer to "what is down there", asked by the preview and
+ * by the capture alike. Image with no picture chosen yet is simply clear.
  */
 function readBackdrop() {
-  return $('transparent').checked ? null : $('background').value;
+  switch ($('background-mode').value) {
+    case 'solid':
+      return { colour: $('background').value };
+    case 'image':
+      return backdropPicture && {
+        image: backdropPicture.bitmap,
+        size: +$('background-size').value,
+        x: +$('background-x').value,
+        y: +$('background-y').value,
+      };
+    default:
+      return null;
+  }
+}
+
+/**
+ * Place the preview's background picture from the same placeBackdrop() the
+ * export draws with. Percentages of the render's row, so the picture scales
+ * with the preview however the stage is sized.
+ */
+function placePreviewPicture(backdrop, w, h) {
+  const art = $('backdrop-art');
+  art.hidden = !backdrop?.image;
+  if (art.hidden) return;
+  const { image } = backdrop;
+  const place = placeBackdrop(image.width, image.height, w, h, backdrop);
+  const style = $('backdrop-image').style;
+  style.left = `${(place.x / w) * 100}%`;
+  style.top = `${(place.y / h) * 100}%`;
+  style.width = `${(place.width / w) * 100}%`;
+  style.height = `${(place.height / h) * 100}%`;
 }
 
 /**
@@ -251,9 +331,11 @@ function drawPreviewCaption() {
   const caption = readCaption();
   const hidden = canvas.classList.contains('empty');
 
-  // The colour layer. Empty string lets the stage's checkerboard through,
-  // which is how a transparent background has always read here.
-  $('backdrop').style.backgroundColor = readBackdrop() ?? '';
+  // The background layer. An empty colour lets the stage's checkerboard
+  // through, which is how a transparent background has always read here.
+  const backdrop = readBackdrop();
+  $('backdrop').style.backgroundColor = backdrop?.colour ?? '';
+  placePreviewPicture(backdrop, w, h);
 
   /*
    * The band is measured at the *output* size, not at the preview's, and the
@@ -329,12 +411,20 @@ function syncOutputs() {
   $('speed-out').textContent = rps > 0 ? `${trim(rps)} r/s` : 'stopped';
   $('fps-out').textContent = fps > 0 ? `${fps} fps` : 'stopped';
   syncFrameCount();
-  for (const id of ['ambient', 'key', 'fill', 'rim', 'specular']) {
+  for (const id of ['ambient', 'key', 'fill', 'rim', 'specular', 'env-intensity',
+    'exposure', 'shadow-darkness', 'normal-strength', 'emission-strength']) {
     $(`${id}-out`).textContent = trim(+$(id).value);
   }
   $('shininess-out').textContent = $('shininess').value;
+  for (const id of ['env-rotation', 'key-azimuth', 'key-height', 'fill-azimuth', 'fill-height']) {
+    $(`${id}-out`).textContent = `${Math.round(+$(id).value)}°`;
+  }
   $('text-stroke-out').textContent = (+$('text-stroke').value).toFixed(1);
   $('text-size-out').textContent = `${$('text-size').value}%`;
+  $('background-size-out').textContent = `${$('background-size').value}%`;
+  for (const id of ['background-x', 'background-y']) {
+    $(`${id}-out`).textContent = $(id).value;
+  }
   for (const id of ['pos-x', 'pos-y', 'pos-z']) {
     $(`${id}-out`).textContent = trim(+$(id).value);
   }
@@ -416,7 +506,25 @@ function setProgress(done, total) {
 }
 
 function setSaveEnabled(enabled) {
-  document.querySelectorAll('.save').forEach((b) => { b.disabled = !enabled; });
+  // A format this browser cannot make stays off whatever the store says.
+  document.querySelectorAll('.save').forEach((b) => {
+    b.disabled = !enabled || b.dataset.unsupported === 'true';
+  });
+}
+
+/**
+ * An error, worded for the person reading it.
+ *
+ * Running out of memory arrives as a RangeError with wording nobody should
+ * have to decode ("Array buffer allocation failed"), and it has one useful
+ * answer, so it gets that answer. Everything else is shown as it is.
+ */
+function friendlyError(err) {
+  const message = err?.message ?? String(err);
+  if (err instanceof RangeError || /allocation failed|out of memory/i.test(message)) {
+    return `Ran out of memory (${message}). Try fewer frames or a smaller image size.`;
+  }
+  return message;
 }
 
 /* -------------------------------------------------------------- render */
@@ -607,6 +715,7 @@ function schedulePreview() {
   previewHandle = requestAnimationFrame(() => {
     if (!scene.model) return;
     scene.applySettings(readSettings());
+    syncRenderingChrome();
     // applySettings() rebuilds the pivot rotation from scratch, so the spin
     // angle has to be re-applied here. Take it from the clock rather than from
     // the last frame drawn: a settings change also rebuilds the cycle, which
@@ -619,6 +728,7 @@ function schedulePreview() {
       scene.setAngle(0);
     }
     scene.render();
+    recordTextureFit();
     // In lockstep with the resize above. The overlay is resized immediately
     // on a settings change but the renderer's canvas only here, so between
     // the two they lay out at different sizes and the caption sits visibly
@@ -724,6 +834,7 @@ async function handleFile(file, choice = null) {
     scene.setModel(object);
     scene.setHiddenMeshes(hiddenMeshes);
     scene.applySettings(readSettings());
+    syncRenderingChrome();
     // From a zip, the model inside names the export — "Patchwork chair" reads
     // better than "patchwork_chair_obj_0".
     modelName = stemOf(report ? report.picked : file.name);
@@ -748,13 +859,13 @@ async function handleFile(file, choice = null) {
 
     $('dropzone').hidden = true;
     canvas.classList.remove('empty');
-    $('render').disabled = false;
+    $('render').disabled = contextLost;
     discardStore();
     schedulePreview();
     if ($('preview').checked) startPlayback();   // requested before a model existed
   } catch (err) {
     console.error(err);
-    $('model-info').innerHTML = `<span class="warn">${escapeHtml(err.message)}</span>`;
+    $('model-info').innerHTML = `<span class="warn">${escapeHtml(friendlyError(err))}</span>`;
     appliedReplacements = [];
     // A model that will not load is exactly when the picker is wanted, so the
     // options travel with the error rather than dying with it.
@@ -1311,6 +1422,9 @@ const TEXT_RANGE = {
    */
   ambient: [0, 100], key: [0, 100], fill: [0, 100], rim: [0, 100],
   specular: [0, 100], shininess: [1, 1000],
+  'env-intensity': [0, 100], exposure: [0.01, 100],
+  'normal-strength': [0, 100], 'emission-strength': [0, 1000],
+  'background-size': [0, 1000],
 };
 
 /** Each slider's own range, captured before anything widens it. */
@@ -1437,7 +1551,7 @@ for (const id of RANGE_IDS) {
   $(`${id}-out`).title = 'Double-click to type a value';
   $(id).addEventListener('change', () => normaliseRange(id));
 }
-for (const id of ['up-axis', 'direction', 'quality', 'background', 'transparent',
+for (const id of ['up-axis', 'direction', 'quality', 'background', 'background-mode',
   'width', 'height']) {
   $(id).addEventListener('input', () => { discardStore(); applyAndPreview(); });
 }
@@ -1445,6 +1559,62 @@ for (const id of ['up-axis', 'direction', 'quality', 'background', 'transparent'
 for (const id of POSITION_IDS) {
   $(id).addEventListener('input', () => { discardStore(); flashAxis(); });
 }
+
+for (const id of PICTURE_IDS) $(id).addEventListener('input', discardStore);
+
+/* ---------------------------------------------------------- background */
+
+/** Show only the rows that belong to the chosen kind of background. */
+function syncBackgroundChrome() {
+  $('image').dataset.background = $('background-mode').value;
+}
+$('background-mode').addEventListener('input', syncBackgroundChrome);
+
+const PICTURE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/bmp']);
+const PICTURE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'bmp']);
+
+/**
+ * Decode a chosen picture and make it the background.
+ *
+ * Decoded up front, once, into an ImageBitmap: every exported frame draws it,
+ * and a picture that will not decode is better reported now than discovered
+ * halfway through a render. The previous picture is kept until the new one
+ * has proved itself.
+ */
+async function chooseBackdropPicture(file) {
+  if (!file) return;
+  const name = $('background-name');
+  const known = PICTURE_TYPES.has(file.type)
+    || PICTURE_EXTENSIONS.has(extOf(file.name));
+  if (!known) {
+    name.textContent = `${file.name} is not a JPEG, PNG, WebP or BMP`;
+    return;
+  }
+  let bitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    name.textContent = `Could not read ${file.name}`;
+    return;
+  }
+  if (backdropPicture) {
+    backdropPicture.bitmap.close();
+    URL.revokeObjectURL(backdropPicture.url);
+  }
+  backdropPicture = { bitmap, url: URL.createObjectURL(file), name: file.name };
+  $('backdrop-image').src = backdropPicture.url;
+  name.textContent = file.name;
+  name.title = `${file.name} · ${bitmap.width} × ${bitmap.height}`;
+  discardStore();
+  applyAndPreview();
+}
+
+$('background-browse').addEventListener('click', () => $('background-file').click());
+$('background-file').addEventListener('change', (e) => {
+  chooseBackdropPicture(e.target.files[0]);
+  // Cleared so that choosing the same file again still counts as a change.
+  e.target.value = '';
+});
 
 $('square').addEventListener('change', () => {
   if ($('square').checked) $('height').value = $('width').value;
@@ -1484,15 +1654,127 @@ $('reset-position').addEventListener('click', () => {
   flashAxis();
 });
 
+/*
+ * Everything in the Rendering section back to where it started, the debug
+ * switches included: a layer left off by accident is the kind of thing a
+ * reset is for.
+ */
+function resetRendering() {
+  const d = DEFAULT_SETTINGS;
+  setSliderValue('ambient', d.ambient);
+  setSliderValue('key', d.keyLight);
+  setSliderValue('fill', d.fillLight);
+  setSliderValue('rim', d.rimLight);
+  setSliderValue('specular', d.specular);
+  setSliderValue('shininess', d.shininess);
+  setSliderValue('env-intensity', d.envIntensity);
+  setSliderValue('env-rotation', d.envRotation);
+  setSliderValue('exposure', d.exposure);
+  setSliderValue('shadow-darkness', d.shadowDarkness);
+  setSliderValue('normal-strength', d.normalStrength);
+  setSliderValue('emission-strength', d.emissionStrength);
+  setLightAngles();
+  $('quality').value = String(d.supersample);
+  $('shading').value = d.shading;
+  $('environment').value = d.environment;
+  $('tone-mapping').value = d.toneMapping;
+  $('key-color').value = d.keyColor;
+  $('fill-color').value = d.fillColor;
+  $('ambient-color').value = d.ambientColor;
+  $('shadows').value = d.shadows;
+  $('debug-view').value = d.view;
+  $('texture-filter').value = d.textureFilter;
+  $('double-sided').checked = d.doubleSided;
+  for (const key of Object.keys(layerState)) layerState[key] = true;
+  renderLayerList();
+  applyCapabilityLimits();
+}
+
+/*
+ * The light angles' defaults are fractional — the old vectors, exactly — and
+ * an HTML value attribute can only approximate them, so they are written in
+ * from the settings instead. step="any" is what lets a range hold them.
+ */
+function setLightAngles() {
+  const d = DEFAULT_SETTINGS;
+  $('key-azimuth').value = d.keyAzimuth;
+  $('key-height').value = d.keyHeight;
+  $('fill-azimuth').value = d.fillAzimuth;
+  $('fill-height').value = d.fillHeight;
+}
+
 $('reset-render').addEventListener('click', () => {
-  setSliderValue('ambient', DEFAULT_SETTINGS.ambient);
-  setSliderValue('key', DEFAULT_SETTINGS.keyLight);
-  setSliderValue('fill', DEFAULT_SETTINGS.fillLight);
-  setSliderValue('rim', DEFAULT_SETTINGS.rimLight);
-  setSliderValue('specular', DEFAULT_SETTINGS.specular);
-  setSliderValue('shininess', DEFAULT_SETTINGS.shininess);
+  resetRendering();
+  discardStore();
   applyAndPreview();
 });
+
+for (const id of RENDER_CHOICE_IDS) {
+  $(id).addEventListener('input', () => { discardStore(); applyAndPreview(); });
+}
+
+/* --------------------------------------------------- rendering chrome */
+
+/**
+ * One checkbox per material layer, each with how many of the model's
+ * materials use it. Rebuilt whenever that could change: a new model, or a
+ * different Materials path — Classic keeps only the colour map, so most
+ * layers honestly have nothing to switch there.
+ */
+function renderLayerList() {
+  const list = $('layer-list');
+  const { counts } = scene.model ? scene.layerCounts() : { counts: {} };
+  list.replaceChildren(...LAYERS.map(({ key, label }) => {
+    const count = counts[key] ?? 0;
+    const row = document.createElement('label');
+    row.className = 'layer-row';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = layerState[key];
+    box.dataset.layer = key;
+    const text = document.createElement('span');
+    text.textContent = label;
+    const tally = document.createElement('span');
+    tally.className = 'count';
+    tally.textContent = scene.model ? String(count) : '';
+    row.append(box, text, tally);
+    if (scene.model && !count) {
+      row.classList.add('unused');
+      row.title = 'No material on this model uses this layer';
+    }
+    return row;
+  }));
+}
+
+$('layer-list').addEventListener('change', (e) => {
+  const key = e.target?.dataset?.layer;
+  if (!key) return;
+  layerState[key] = e.target.checked;
+  discardStore();
+  applyAndPreview();
+});
+
+/**
+ * Say which path Auto chose, and hide the controls that mean nothing on it.
+ * Only touches the DOM when the answer changes, since this runs on every
+ * preview.
+ */
+let chromeKey = '';
+function syncRenderingChrome() {
+  if (!scene.model) return;
+  const { counts, total, shading } = scene.layerCounts();
+  const lit = shading === 'physical' && $('environment').value !== 'none';
+  const key = JSON.stringify([shading, counts, total, $('shading').value, lit]);
+  if (key === chromeKey) return;
+  chromeKey = key;
+  $('rendering').dataset.shading = shading;
+  $('rendering').dataset.environment = lit ? 'lit' : 'none';
+  const chosen = $('shading').value === 'auto' ? 'Auto chose ' : 'Using ';
+  $('shading-note').textContent = shading === 'physical'
+    ? `${chosen}Physical: ${total} material${total === 1 ? '' : 's'}, lit by the environment too.`
+    : `${chosen}Classic: colour and colour map only, lit as it always has been.`;
+  renderLayerList();
+}
 
 // Preview-only guides: deliberately not part of readSettings(), so toggling
 // them neither re-renders nor throws away an existing frame store.
@@ -1599,7 +1881,7 @@ $('render').addEventListener('click', async () => {
       setProgress(done, total);
       $('store-info').textContent = `Rendering frame ${done} of ${total}…`;
       return !cancelRequested;
-    }, caption);
+    }, caption, readBackdrop());
 
     if (!result) {
       $('store-info').textContent = 'Cancelled.';
@@ -1613,11 +1895,11 @@ $('render').addEventListener('click', async () => {
     }
   } catch (err) {
     console.error(err);
-    $('store-info').innerHTML = `<span class="warn">${err.message}</span>`;
+    $('store-info').innerHTML = `<span class="warn">${escapeHtml(friendlyError(err))}</span>`;
   } finally {
     setProgress(1, 1);
     rendering = false;
-    $('render').disabled = false;
+    $('render').disabled = contextLost;
     $('cancel').disabled = true;
     scene.setAngle(0);
     scene.render();
@@ -1696,7 +1978,7 @@ async function saveAs(format) {
       (note ? ` · ${note}` : '');
   } catch (err) {
     console.error(err);
-    $('save-info').innerHTML = `<span class="warn">${err.message}</span>`;
+    $('save-info').innerHTML = `<span class="warn">${escapeHtml(friendlyError(err))}</span>`;
   } finally {
     setBusy('');
     setSaveEnabled(true);
@@ -1718,8 +2000,103 @@ function hexToRgb(hex) {
   return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
 }
 
+/* ------------------------------------------------ what the browser lacks */
+
+/*
+ * The checks that stop the app from running at all live in src/preflight.js,
+ * which runs before this module and shows its messages under the file
+ * browser. These are the problems only the running app can see. A lost
+ * feature is switched off and reported there in orange; anything smaller —
+ * no MSAA, no anisotropic filtering, textures shrunk to fit — is only
+ * recorded for the Browser check list, because it changes nothing anyone
+ * needs to act on.
+ */
+
+/**
+ * Environment lighting needs half-float rendering. Without it the options
+ * are disabled and Environment is set to None. Re-run after a reset, which
+ * would otherwise put an unsupported choice back.
+ */
+function applyCapabilityLimits() {
+  if (scene.caps.halfFloat) return;
+  for (const option of $('environment').options) {
+    if (option.value !== 'none') option.disabled = true;
+  }
+  $('environment').value = 'none';
+  window.Funee?.raise('W3');
+}
+
+/**
+ * Whether this browser can encode WebP, asked once at start-up.
+ *
+ * Safari cannot. It hands back a PNG instead, which encodeStill() already
+ * refuses — but only after someone has clicked Save and waited. Knowing up
+ * front turns that into a disabled button and one orange line.
+ */
+async function checkWebp() {
+  let supported = false;
+  try {
+    // Drawn on first: Chrome refuses to encode a canvas that has no context.
+    const probe = new OffscreenCanvas(1, 1);
+    probe.getContext('2d').fillRect(0, 0, 1, 1);
+    const blob = await probe.convertToBlob({ type: 'image/webp' });
+    supported = blob.type === 'image/webp';
+  } catch {
+    supported = false;
+  }
+  if (window.Funee?.extras) window.Funee.extras.webp = supported;
+  if (supported) return;
+  const button = document.querySelector('.save[data-format="webp"]');
+  button.dataset.unsupported = 'true';
+  button.disabled = true;
+  button.title = 'This browser cannot make WebP files.';
+  window.Funee?.raise('W4');
+}
+
+/**
+ * Note, for the Browser check only, when three.js has had to shrink the
+ * model's textures to fit the graphics card. Softer textures are not worth
+ * interrupting anyone over, but they are worth being able to find out about.
+ */
+let textureCheckedFor = null;
+function recordTextureFit() {
+  const extras = window.Funee?.extras;
+  if (!extras || textureCheckedFor === scene.model) return;
+  const side = scene.oversizedTexture();
+  extras.oversizedTexture = scene.model ? side : null;
+  // Settled once found: the textures will not get any smaller.
+  if (side) textureCheckedFor = scene.model;
+}
+
+/*
+ * The graphics card dropped the page: a driver reset, or a model too large
+ * for graphics memory. Nothing drawn in 3D comes back without a reload, so
+ * say that plainly, stop any render in progress, and leave the frames
+ * already rendered saveable — those are ordinary memory, not the GPU's.
+ */
+let contextLost = false;
+canvas.addEventListener('webglcontextlost', () => {
+  contextLost = true;
+  cancelRequested = true;
+  stopPlayback({ rewind: false });
+  $('render').disabled = true;
+  window.Funee?.contextLost();
+});
+
 /* ----------------------------------------------------------------- init */
 
 canvas.classList.add('empty');
+setLightAngles();
+renderLayerList();
+syncBackgroundChrome();
+applyCapabilityLimits();
 scene.applySettings(readSettings());
 applyAndPreview();
+// For the Browser check list. Set before checkWebp(), which fills in its
+// answer — immediately, if the browser has no OffscreenCanvas at all.
+if (window.Funee) window.Funee.extras = { ...scene.caps, webp: null };
+checkWebp();
+
+// The last step: tells src/preflight.js the app started. Anything that threw
+// before this line is what its "The app did not start" panel reports.
+window.Funee?.ready();
