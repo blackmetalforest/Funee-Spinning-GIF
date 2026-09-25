@@ -30,6 +30,9 @@ import { toClassic, toPhysical, applyLayers, layersOf, debugMaterial, applyFilte
 import { wrapModeFor, samplerWraps, applySamplerWraps, promoteOnlyUvSet } from '../src/dae-fix.js';
 import { setKeyOf } from '../src/archive.js';
 import { placeBackdrop, drawBackdrop } from '../src/backdrop.js';
+import { PRESETS, PRESET_KEYS, presetValues, matchingPreset } from '../src/presets.js';
+import { DEFAULT_SETTINGS, TONE_MAPPINGS } from '../src/scene.js';
+import { ENVIRONMENTS } from '../src/environment.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const OUT = join(here, 'out');
@@ -1013,6 +1016,83 @@ console.log('\nbackground picture');
   check('a picture sits in the render, below the band, clipped to it',
     JSON.stringify(draw) === JSON.stringify(['drawImage', 0, 90, 480, 480])
     && calls.some((c) => c[0] === 'rect' && c[2] === 90 && c[4] === 480) && calls.includes('clip'));
+}
+
+console.log('\nlighting presets');
+{
+  // Where each preset setting lives in index.html, for the range checks.
+  const CONTROL = {
+    ambient: 'ambient', ambientColor: 'ambient-color', keyLight: 'key',
+    keyAzimuth: 'key-azimuth', keyHeight: 'key-height', keyColor: 'key-color',
+    fillLight: 'fill', fillAzimuth: 'fill-azimuth', fillHeight: 'fill-height',
+    fillColor: 'fill-color', rimLight: 'rim', specular: 'specular', shininess: 'shininess',
+    environment: 'environment', envIntensity: 'env-intensity', envRotation: 'env-rotation',
+    toneMapping: 'tone-mapping', exposure: 'exposure', shadows: 'shadows',
+    shadowDarkness: 'shadow-darkness',
+  };
+  const page = readFileSync(join(here, '..', 'index.html'), 'utf8');
+  const tag = (id) => (new RegExp(`<(?:input|select)[^>]*id="${id}"[^>]*>`).exec(page) || [''])[0];
+  const attr = (t, name) => (new RegExp(`\\s${name}="([^"]*)"`).exec(t) || [])[1];
+  const shadowOptions = ['off', 'model', 'ground'];
+
+  check('every preset setting is a real setting with a control',
+    PRESET_KEYS.every((k) => k in DEFAULT_SETTINGS && tag(CONTROL[k])));
+  for (const [path, list] of Object.entries(PRESETS)) {
+    check(`${path}: eight presets`, list.length === 8, list.length);
+    check(`${path}: ids are unique`, new Set(list.map((p) => p.id)).size === list.length);
+    check(`${path}: the first is the default look`, Object.keys(list[0].values).length === 0);
+    check(`${path}: labels fit a button`, list.every((p) => p.label.length <= 9 && p.title));
+    const bad = [];
+    for (const preset of list) {
+      for (const [key, value] of Object.entries(preset.values)) {
+        const t = tag(CONTROL[key] ?? '');
+        let ok = PRESET_KEYS.includes(key);
+        if (ok && typeof value === 'number') {
+          ok = value >= +attr(t, 'min') && value <= +attr(t, 'max');
+        } else if (ok && key.endsWith('Color')) {
+          ok = /^#[0-9a-f]{6}$/.test(value);
+        } else if (ok && key === 'environment') {
+          ok = ENVIRONMENTS.includes(value);
+        } else if (ok && key === 'toneMapping') {
+          ok = value === 'auto' || value in TONE_MAPPINGS;
+        } else if (ok && key === 'shadows') {
+          ok = shadowOptions.includes(value);
+        }
+        if (!ok) bad.push(`${preset.id}.${key}=${value}`);
+      }
+    }
+    check(`${path}: every value is one its control can hold`, !bad.length, bad.join(', '));
+    // Retro has no environment or tone mapping; asking for one would be a
+    // setting with no visible effect that still breaks the preset's match.
+    if (path === 'classic') {
+      check('retro presets leave environment and tone mapping alone', list.every((p) =>
+        !('environment' in p.values) && !('toneMapping' in p.values) && !('exposure' in p.values)));
+    }
+    // Two presets with identical lighting would both light up at once.
+    const seen = new Set(list.map((p) => JSON.stringify(presetValues(p, DEFAULT_SETTINGS))));
+    check(`${path}: no two presets are the same lighting`, seen.size === list.length);
+    const each = list.every((p) =>
+      matchingPreset(path, { ...DEFAULT_SETTINGS, ...presetValues(p, DEFAULT_SETTINGS) },
+        DEFAULT_SETTINGS) === p);
+    check(`${path}: each preset is recognised once applied`, each);
+  }
+  check('the defaults match the first preset of each path',
+    matchingPreset('physical', DEFAULT_SETTINGS, DEFAULT_SETTINGS)?.id === 'studio'
+    && matchingPreset('classic', DEFAULT_SETTINGS, DEFAULT_SETTINGS)?.id === 'standard');
+  check('a hand-tuned light matches no preset',
+    matchingPreset('classic', { ...DEFAULT_SETTINGS, keyLight: 0.96 }, DEFAULT_SETTINGS) === null);
+  check('settings outside lighting do not affect the match',
+    matchingPreset('classic', { ...DEFAULT_SETTINGS, zoom: 3, brightness: 2 },
+      DEFAULT_SETTINGS)?.id === 'standard');
+  check('colours match whatever their case',
+    matchingPreset('classic', { ...DEFAULT_SETTINGS, keyColor: '#FFFFFF' },
+      DEFAULT_SETTINGS)?.id === 'standard');
+  const noEnv = (v) => ({ ...v, environment: 'none' });
+  check('an adjusted browser still recognises its presets',
+    matchingPreset('physical', { ...DEFAULT_SETTINGS, environment: 'none' },
+      DEFAULT_SETTINGS, noEnv)?.id === 'studio');
+  check('brightness defaults to 1, and the slider shows it as 100%',
+    DEFAULT_SETTINGS.brightness === 1 && attr(tag('brightness'), 'value') === '100');
 }
 
 console.log('\npreflight');

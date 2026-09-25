@@ -109,6 +109,11 @@ export const DEFAULT_SETTINGS = {
   // what keeps a Classic render identical to the old renderer's.
   toneMapping: 'auto',
   exposure: 1.0,
+  // Overall brightness: a multiplier on every light at once — key, fill,
+  // rim, ambient and environment — so the balance a preset set up survives
+  // turning it all up or down. Works on both paths, where exposure needs tone
+  // mapping to do anything.
+  brightness: 1.0,
   // Light placement and colour. The angles are measured around the view, so
   // the lights keep riding with the camera as they always have.
   keyAzimuth: KEY_DEFAULT.azimuth,
@@ -744,9 +749,10 @@ export class SpinScene {
     // light of intensity 1 lands at 1/PI of what Python's non-physical shading
     // produces. Scaling by PI makes the two match. (The rim term is added
     // directly in the shader, so it is deliberately not scaled.)
-    this.keyLight.intensity = s.keyLight * Math.PI;
-    this.fillLight.intensity = s.fillLight * Math.PI;
-    this.rim.value = s.rimLight;
+    const bright = Math.max(0, s.brightness ?? 1);
+    this.keyLight.intensity = s.keyLight * bright * Math.PI;
+    this.fillLight.intensity = s.fillLight * bright * Math.PI;
+    this.rim.value = s.rimLight * bright;
 
     // Colours. White is the old behaviour; the ground keeps its 0.65 ratio to
     // the sky so a tinted ambient is still Python's hemisphere, just tinted.
@@ -768,8 +774,8 @@ export class SpinScene {
     // and an environment *is* light arriving from everywhere. Keeping both
     // counted the ambient twice and washed every painted surface out, so
     // while an environment lights the model it replaces the hemisphere.
-    this.hemi.intensity = lit ? 0 : s.ambient * Math.PI;
-    this.scene.environmentIntensity = s.envIntensity;
+    this.hemi.intensity = lit ? 0 : s.ambient * bright * Math.PI;
+    this.scene.environmentIntensity = s.envIntensity * bright;
     this.scene.environmentRotation.set(0, THREE.MathUtils.degToRad(s.envRotation), 0);
 
     const tone = s.toneMapping === 'auto' ? (physical ? 'neutral' : 'none') : s.toneMapping;

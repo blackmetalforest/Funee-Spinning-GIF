@@ -127,24 +127,6 @@
     </section>
 
     <section class="group">
-      <h2>View</h2>
-      <div class="row"><label for="elevation">View angle</label>
-        <input type="range" id="elevation" min="-90" max="90" step="1" value="20">
-        <output for="elevation" id="elevation-out">20°</output></div>
-      <div class="row"><label for="start">Start rotation</label>
-        <input type="range" id="start" min="0" max="359" step="1" value="0">
-        <output for="start" id="start-out">0°</output></div>
-      <div class="row"><label for="fov">Field of view</label>
-        <input type="range" id="fov" min="10" max="150" step="1" value="35">
-        <output for="fov" id="fov-out">35°</output></div>
-      <div class="row"><label for="zoom">Zoom</label>
-        <input type="range" id="zoom" min="0.3" max="5" step="0.05" value="1">
-        <output for="zoom" id="zoom-out">1.00×</output></div>
-      <div class="row actions"><button id="reset-view">Reset to defaults</button></div>
-    </section>
-
-
-    <section class="group">
       <h2>Spin</h2>
       <div class="row"><label for="direction">Direction</label>
         <select id="direction">
@@ -161,6 +143,23 @@
         <span class="muted small" id="frames-note">frame rate ÷ spin speed</span>
         <output id="frames-out">100</output></div>
       <p id="loop-info" class="muted small">—</p>
+    </section>
+
+    <section class="group">
+      <h2>View</h2>
+      <div class="row"><label for="elevation">View angle</label>
+        <input type="range" id="elevation" min="-90" max="90" step="1" value="20">
+        <output for="elevation" id="elevation-out">20°</output></div>
+      <div class="row"><label for="start">Start rotation</label>
+        <input type="range" id="start" min="0" max="359" step="1" value="0">
+        <output for="start" id="start-out">0°</output></div>
+      <div class="row"><label for="fov">Field of view</label>
+        <input type="range" id="fov" min="10" max="150" step="1" value="35">
+        <output for="fov" id="fov-out">35°</output></div>
+      <div class="row"><label for="zoom">Zoom</label>
+        <input type="range" id="zoom" min="0.3" max="5" step="0.05" value="1">
+        <output for="zoom" id="zoom-out">1.00×</output></div>
+      <div class="row actions"><button id="reset-view">Reset to defaults</button></div>
     </section>
 
     <section class="group">
@@ -242,82 +241,77 @@
 
     <section class="group" id="rendering">
       <h2>Rendering</h2>
-      <div class="row"><label for="quality">Quality</label>
-        <select id="quality"
-                title="How many times over each frame is rendered before it is scaled down to size. Smoother edges, slower renders.">
-          <option value="1" selected>Fast (MSAA only)</option>
-          <option value="2">Good (2× sampling)</option>
-          <option value="3">Best (3× sampling)</option>
-        </select></div>
       <!--
-        Auto draws a model with its own physically based materials when it has
-        them (glTF, USDZ) and with the Classic Phong path otherwise, which is
-        what every OBJ and Collada rip was tuned against. The note underneath
-        says which one was picked.
+        Realistic draws a model with its own physically based materials (glTF,
+        USDZ); Retro is the Phong path every OBJ and Collada rip was tuned
+        against. Each model picks one as it loads, and Retro is the fallback
+        for anything that does not say. The note underneath says which.
       -->
-      <div class="row"><label for="shading">Materials</label>
-        <select id="shading">
-          <option value="auto" selected>Auto — from the model</option>
-          <option value="physical">Physical (PBR)</option>
-          <option value="classic">Classic (Phong)</option>
+      <div class="row"><label for="shading">Lighting</label>
+        <select id="shading"
+                title="Realistic uses the model's physically based materials. Retro is the classic look of older games and modelling tools. Chosen for each model as it loads.">
+          <option value="physical">Realistic</option>
+          <option value="classic" selected>Retro</option>
         </select></div>
       <p id="shading-note" class="muted small"></p>
-      <div class="row pbr-only"><label for="environment">Environment</label>
-        <select id="environment"
-                title="What reflective and metal surfaces reflect. Physical materials only.">
-          <option value="studio" selected>Studio</option>
-          <option value="soft">Soft sky</option>
-          <option value="none">None</option>
-        </select></div>
-      <div class="row pbr-only"><label for="env-intensity">Env. strength</label>
-        <input type="range" id="env-intensity" min="0" max="3" step="0.01" value="0.7">
-        <output for="env-intensity" id="env-intensity-out">0.70</output></div>
-      <div class="row pbr-only"><label for="env-rotation">Env. rotation</label>
-        <input type="range" id="env-rotation" min="0" max="359" step="1" value="0">
-        <output for="env-rotation" id="env-rotation-out">0°</output></div>
-      <div class="row"><label for="tone-mapping">Tone mapping</label>
-        <select id="tone-mapping"
-                title="How brightness beyond white is brought back into range. Auto is Neutral for physical materials and None for Classic.">
-          <option value="auto" selected>Auto</option>
-          <option value="none">None</option>
-          <option value="neutral">Neutral</option>
-          <option value="agx">AgX</option>
-          <option value="aces">ACES Filmic</option>
-          <option value="reinhard">Reinhard</option>
-          <option value="cineon">Cineon</option>
-        </select></div>
-      <div class="row"><label for="exposure">Exposure</label>
-        <input type="range" id="exposure" min="0.1" max="3" step="0.01" value="1">
-        <output for="exposure" id="exposure-out">1.00</output></div>
-      <!-- Hidden while an environment lights the model: it is the ambient then. -->
-      <div class="row hemi-only"><label for="ambient">Ambient</label>
-        <input type="range" id="ambient" min="0" max="1" step="0.01" value="0.30">
-        <output for="ambient" id="ambient-out">0.30</output></div>
-      <div class="row"><label for="key">Key light</label>
-        <input type="range" id="key" min="0" max="2" step="0.01" value="0.95">
-        <output for="key" id="key-out">0.95</output></div>
-      <div class="row"><label for="fill">Fill light</label>
-        <input type="range" id="fill" min="0" max="2" step="0.01" value="0.32">
-        <output for="fill" id="fill-out">0.32</output></div>
-      <div class="row"><label for="rim">Rim light</label>
-        <input type="range" id="rim" min="0" max="2" step="0.01" value="0">
-        <output for="rim" id="rim-out">0.00</output></div>
-      <!-- Phong's own two controls; physical materials carry their own gloss. -->
-      <div class="row classic-only"><label for="specular">Reflectivity</label>
-        <input type="range" id="specular" min="0" max="1.5" step="0.01" value="0">
-        <output for="specular" id="specular-out">0.00</output></div>
-      <div class="row classic-only"><label for="shininess">Highlight size</label>
-        <input type="range" id="shininess" min="1" max="200" step="1" value="40">
-        <output for="shininess" id="shininess-out">40</output></div>
+      <!-- Scales every light at once, on top of whatever the preset set. -->
+      <div class="row"><label for="brightness">Overall brightness</label>
+        <input type="range" id="brightness" min="0" max="300" step="1" value="100"
+               title="Turns every light up or down together, keeping the balance between them.">
+        <output for="brightness" id="brightness-out">100%</output></div>
+      <!-- Filled from src/presets.js for whichever Lighting is chosen. -->
+      <div id="presets" class="preset-grid" role="group" aria-label="Lighting presets"></div>
 
       <details class="more" id="lighting-more">
-        <summary>Lights &amp; shadows</summary>
+        <summary>Advanced lighting</summary>
+        <!--
+          Rows that do nothing on the current settings are hidden: Phong's
+          highlight pair under Realistic, the environment under Retro, the
+          ambient while an environment stands in for it, exposure without tone
+          mapping, the floor's darkness without a floor. The attributes that
+          do the hiding are set on #rendering from main.js.
+        -->
+        <div class="row pbr-only"><label for="environment">Environment</label>
+          <select id="environment"
+                  title="What reflective and metal surfaces reflect. Realistic lighting only.">
+            <option value="studio" selected>Studio</option>
+            <option value="soft">Soft sky</option>
+            <option value="none">None</option>
+          </select></div>
+        <div class="row env-only"><label for="env-intensity">Env. strength</label>
+          <input type="range" id="env-intensity" min="0" max="3" step="0.01" value="0.7">
+          <output for="env-intensity" id="env-intensity-out">0.70</output></div>
+        <div class="row env-only"><label for="env-rotation">Env. rotation</label>
+          <input type="range" id="env-rotation" min="0" max="359" step="1" value="0">
+          <output for="env-rotation" id="env-rotation-out">0°</output></div>
+        <div class="row"><label for="tone-mapping">Tone mapping</label>
+          <select id="tone-mapping"
+                  title="How brightness beyond white is brought back into range. Auto is Neutral for Realistic and None for Retro.">
+            <option value="auto" selected>Auto</option>
+            <option value="none">None</option>
+            <option value="neutral">Neutral</option>
+            <option value="agx">AgX</option>
+            <option value="aces">ACES Filmic</option>
+            <option value="reinhard">Reinhard</option>
+            <option value="cineon">Cineon</option>
+          </select></div>
+        <div class="row tone-only"><label for="exposure">Exposure</label>
+          <input type="range" id="exposure" min="0.1" max="3" step="0.01" value="1">
+          <output for="exposure" id="exposure-out">1.00</output></div>
+        <div class="row hemi-only"><label for="ambient">Ambient</label>
+          <input type="range" id="ambient" min="0" max="1" step="0.01" value="0.30">
+          <output for="ambient" id="ambient-out">0.30</output></div>
+        <div class="row hemi-only"><label for="ambient-color">Ambient colour</label>
+          <input type="color" id="ambient-color" value="#ffffff"></div>
         <!--
           Angles are measured around the view — 0° is straight from the camera,
           positive is to the right — so the lights keep riding with the camera
           and the model turns under them. The defaults are the long-standing
           directions, to the last decimal, so they show as fractions.
         -->
+        <div class="row"><label for="key">Key light</label>
+          <input type="range" id="key" min="0" max="2" step="0.01" value="0.95">
+          <output for="key" id="key-out">0.95</output></div>
         <div class="row"><label for="key-azimuth">Key angle</label>
           <input type="range" id="key-azimuth" min="-180" max="180" step="any" value="28.81">
           <output for="key-azimuth" id="key-azimuth-out">29°</output></div>
@@ -326,6 +320,9 @@
           <output for="key-height" id="key-height-out">29°</output></div>
         <div class="row"><label for="key-color">Key colour</label>
           <input type="color" id="key-color" value="#ffffff"></div>
+        <div class="row"><label for="fill">Fill light</label>
+          <input type="range" id="fill" min="0" max="2" step="0.01" value="0.32">
+          <output for="fill" id="fill-out">0.32</output></div>
         <div class="row"><label for="fill-azimuth">Fill angle</label>
           <input type="range" id="fill-azimuth" min="-180" max="180" step="any" value="-40.36">
           <output for="fill-azimuth" id="fill-azimuth-out">-40°</output></div>
@@ -334,8 +331,16 @@
           <output for="fill-height" id="fill-height-out">-4°</output></div>
         <div class="row"><label for="fill-color">Fill colour</label>
           <input type="color" id="fill-color" value="#ffffff"></div>
-        <div class="row hemi-only"><label for="ambient-color">Ambient colour</label>
-          <input type="color" id="ambient-color" value="#ffffff"></div>
+        <div class="row"><label for="rim">Rim light</label>
+          <input type="range" id="rim" min="0" max="2" step="0.01" value="0">
+          <output for="rim" id="rim-out">0.00</output></div>
+        <!-- Phong's own two controls; physical materials carry their own gloss. -->
+        <div class="row classic-only"><label for="specular">Reflectivity</label>
+          <input type="range" id="specular" min="0" max="1.5" step="0.01" value="0">
+          <output for="specular" id="specular-out">0.00</output></div>
+        <div class="row classic-only"><label for="shininess">Highlight size</label>
+          <input type="range" id="shininess" min="1" max="200" step="1" value="40">
+          <output for="shininess" id="shininess-out">40</output></div>
         <div class="row"><label for="shadows">Shadows</label>
           <select id="shadows"
                   title="Cast by the key light. The floor shows only the shadow, so it works on a transparent background.">
@@ -343,13 +348,20 @@
             <option value="model">On the model</option>
             <option value="ground">On the model and a floor</option>
           </select></div>
-        <div class="row"><label for="shadow-darkness">Floor shadow</label>
+        <div class="row ground-only"><label for="shadow-darkness">Floor shadow</label>
           <input type="range" id="shadow-darkness" min="0" max="1" step="0.01" value="0.5">
           <output for="shadow-darkness" id="shadow-darkness-out">0.50</output></div>
       </details>
 
       <details class="more" id="layers-more">
         <summary>Layers &amp; debug</summary>
+        <div class="row"><label for="quality">Quality</label>
+          <select id="quality"
+                  title="How many times over each frame is rendered before it is scaled down to size. Smoother edges, slower renders.">
+            <option value="1" selected>Fast (MSAA only)</option>
+            <option value="2">Good (2× sampling)</option>
+            <option value="3">Best (3× sampling)</option>
+          </select></div>
         <!--
           For looking at one part of a material at a time. The view shows a
           single channel unlit; the switches take a layer out of the ordinary

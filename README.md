@@ -41,7 +41,9 @@ Tip: change the Address → We Love Katamari
   when it is buried in a second archive
 - Renders on the GPU with three.js — with the model's own **physically based
   materials** (normal, metal/roughness, emission, occlusion and the rest) lit
-  by an environment, or with the flat Classic look older rips were made for
+  by an environment, or with the flat Retro look older rips were made for
+- **Eight one-click lighting presets** for each look, and one **Overall
+  brightness** slider; every individual light is still there underneath
 - Produces a **seamless loop** — frame *i* sits at exactly `i × 360/N` degrees,
   so the last frame steps into the first with no repeated pose
 - Takes a spin speed and a frame rate and works out the frame count for you,
@@ -396,13 +398,13 @@ what the vendored loader returns, which is left unmodified.
 off for every alpha-blended material. That is right for a pane of glass and
 wrong for the common export that marks a *whole model* as blended because one
 corner of its atlas is translucent — the inside of the Canon's viewfinder then
-draws straight through its housing. Physical materials keep depth writing on,
-as Classic always has.
+draws straight through its housing. Realistic lighting keeps depth writing on,
+as Retro always has.
 
 **Texture sets.** When a zip's colour map has to be matched to a material by
 name, the rest of its set — normal, roughness, metalness, occlusion, emissive
 maps sharing the same stem, `_COL_`/`_NRML_`/`_ROUGH_` and the like — is
-attached with it, and Auto then draws the model Physical. Glossiness maps are
+attached with it, and the model then loads with Realistic lighting. Glossiness maps are
 left out (they are roughness inverted), as are opacity and height maps.
 
 Two things are deliberately *not* repaired, because there is no honest rule for
@@ -494,39 +496,89 @@ since the picture may leave parts of the frame uncovered.
 
 ## Rendering
 
-**Quality** (render supersampling) lives at the top of this section and is
-reset along with it.
+Tuning a model's lighting can take a lot of sliders, so the section shows only
+four things until you ask for more:
 
-### Two ways to draw a material
+1. **Lighting** — Realistic or Retro, picked for each model as it loads.
+2. **Overall brightness** — every light up or down at once.
+3. **Eight presets**, in two rows, for whichever Lighting is chosen.
+4. Two disclosures, **Advanced lighting** and **Layers & debug**, which hold
+   every individual control.
 
-The **Materials** dropdown chooses between three.js's two lighting models.
+**Reset to defaults** under them puts all of it back, including the Lighting
+the model picked.
 
-| Choice | What it draws | Suits |
+### Realistic and Retro
+
+The **Lighting** dropdown chooses between three.js's two lighting models.
+
+| Choice | What it draws | Picked for |
 | --- | --- | --- |
-| **Physical (PBR)** | the file's own materials, every layer intact, lit by an environment as well as the lights | glTF, USDZ, modern FBX |
-| **Classic (Phong)** | colour and colour map only, Blinn-Phong, no environment | ripped game models, OBJ, Collada |
-| **Auto** (default) | Physical when the model ships physically based materials, Classic when it does not | — |
+| **Realistic** | the file's own physically based materials, every layer intact, lit by an environment as well as the lights | glTF, USDZ, modern FBX: any model that ships physically based materials |
+| **Retro** | colour and colour map only, Blinn-Phong, no environment | ripped game models, OBJ, Collada, and anything that does not say |
 
-The note under the dropdown says what Auto chose. Classic is the renderer this
-app has always had, kept exactly — a model that looked right before still looks
-the same. Physical is what fixes the models that did not:
+Each model picks one as it loads, and the note under the dropdown says which
+and why; after you pick the other by hand, the note says what the model would
+have chosen. Choosing a different texture or material file for the same model
+keeps a choice made by hand. Retro is the renderer this app has always had,
+kept exactly: a model that looked right before still looks the same. Realistic
+is what fixes the models that did not:
 
 - **Metal went black.** A fully metallic surface has no diffuse colour at all;
   everything it shows is a reflection. Lit by three lights and nothing else it
   reflects three points and black between them, which is why the Canon AT-1
-  rendered nearly black. Physical materials reflect an **environment** as well.
+  rendered nearly black. Realistic materials reflect an **environment** as well.
 - **Colour that lived in emission went black.** The Mii's colours are all
-  emissive, over a black base colour. Classic keeps the base colour and drops
-  emission; Physical keeps both.
+  emissive, over a black base colour. Retro keeps the base colour and drops
+  emission; Realistic keeps both.
 - **Normal, roughness, metalness, occlusion and clearcoat maps were ignored.**
-  Classic draws a colour map and nothing else.
+  Retro draws a colour map and nothing else.
 
-Forcing Physical on a Classic model upgrades each Phong or Lambert material to
+Choosing Realistic for a Retro model upgrades each Phong or Lambert material to
 a non-metallic `MeshStandardMaterial` with every map it carries and a roughness
-matched to its shininess. Forcing Classic on a physical model draws it the old
-way, flat.
+matched to its shininess. Choosing Retro for a physically based model draws it
+the old way, flat.
 
-### Environment, tone mapping and exposure
+### Overall brightness
+
+One slider, 0–300%, that multiplies every light together: key, fill, rim,
+ambient and the environment. The balance a preset set up survives, and it works
+the same on both paths; Exposure only does anything with tone mapping, and
+Retro has none. It sits on top of the presets rather than being part of them,
+so a brightness you have settled on stays while you try presets. Emissive and
+unlit surfaces glow by themselves and are not affected.
+
+### Presets
+
+Each button sets **every** lighting control in Advanced lighting at once,
+starting from the defaults, so a preset always gives the same picture whatever
+was clicked before it. The button stays highlighted while the lighting still
+matches it exactly, and goes dark the moment a slider moves. Presets never
+touch the model's position, Overall brightness or anything in Layers & debug.
+
+| Realistic | | Retro | |
+| --- | --- | --- | --- |
+| **Studio** | softboxes in a grey room; the default | **Standard** | the original lighting; the default |
+| **Outdoors** | high sun and open sky, self-shadowing | **Flat** | painted colour, no light and shade: sprites and unlit games |
+| **Indoors** | warm lamps overhead | **Viewport** | a light from the viewer, as in a modelling program |
+| **Soft** | overcast: even light, gentle shadows | **Console** | strong ambient and one light from above, as 90s consoles did it |
+| **Product** | bright product shot with edge highlights | **Sunlit** | warm sun, blue sky ambient |
+| **Sunset** | low orange sun, blue sky behind | **Showcase** | character-select lighting, a bright edge all round |
+| **Dramatic** | one hard light and deep shadows | **Glossy** | shiny plastic, like a toy |
+| **Night** | cool moonlight | **Night** | cool moonlight |
+
+Switching Lighting swaps a preset for the other path's default, since most
+presets mean nothing on the other path: Glossy is Phong's highlight. Lighting you
+tuned by hand is kept as it is. The presets live in
+[src/presets.js](src/presets.js), and the tests check that each one's values
+fit its controls and that no two are the same.
+
+### Advanced lighting
+
+Rows that would do nothing are hidden: the environment rows under Retro, Env.
+strength and rotation with no environment, Exposure with no tone mapping,
+Ambient while an environment stands in for it, Reflectivity and Highlight size
+under Realistic, and Floor shadow without a floor.
 
 **Environment** is what reflective surfaces reflect: **Studio**, a grey room
 with softboxes, for crisp product-shot highlights; **Soft sky**, a plain
@@ -539,32 +591,30 @@ While an environment lights the model it also *replaces* the **Ambient**
 slider's hemisphere light, and that slider is hidden. Both are light arriving
 from every direction; counting it twice washed every painted surface out. The
 default strength of 0.7 was measured rather than picked: with it, the shrimp's
-average colour on its model pixels is within a few levels of its Classic
-render, while the Canon's bare chrome still reads bright. The environment is used by Physical materials
-only. three.js would hand it to Phong materials too, as a mirror reflection
-mixed into their colour, and every Classic model would change, so on that path
-there is none — and its controls are hidden.
+average colour on its model pixels is within a few levels of its Retro render,
+while the Canon's bare chrome still reads bright. The environment is used by
+Realistic lighting only. three.js would hand it to Phong materials too, as a
+mirror reflection mixed into their colour, and every Retro model would change,
+so on that path there is none.
 
 **Tone mapping** brings brightness beyond white back into range. **Auto** is
-Khronos PBR **Neutral** for Physical — chosen because it leaves colours below
+Khronos PBR **Neutral** for Realistic — chosen because it leaves colours below
 about 80% brightness alone, so a base colour stays the colour it was authored —
-and **None** for Classic, which is again what keeps Classic identical to the
-old renderer. **AgX**, **ACES Filmic**, **Reinhard** and **Cineon** are there
-for a filmic look. **Exposure** scales the light before tone mapping.
+and **None** for Retro, which is again what keeps Retro identical to the old
+renderer. **AgX**, **ACES Filmic**, **Reinhard** and **Cineon** are there for a
+filmic look. **Exposure** scales the light before tone mapping.
 
-Under Physical, **Reflectivity** and **Highlight size** are hidden: they are
-Phong's own two knobs, and a physically based material carries its gloss in its
+**Reflectivity** and **Highlight size** are Phong's own two knobs, so they
+appear under Retro only; a physically based material carries its gloss in its
 roughness instead.
 
-### Lights & shadows
-
 The **Ambient**, **Key**, **Fill** and **Rim** sliders work on both paths. The
-*Lights & shadows* disclosure places the key and fill: an **angle** around the
-view (0° is from the camera, positive to the right) and a **height** above it.
-The lights ride with the camera, as they always have, so the model turns under
-them. The defaults are the long-standing directions to the last decimal, which
-is why they read 29° and −40° rather than round numbers. Each light, and the
-ambient, also takes a **colour**.
+key and fill each have an **angle** around the view (0° is from the camera,
+positive to the right) and a **height** above it. The lights ride with the
+camera, as they always have, so the model turns under them. The defaults are
+the long-standing directions to the last decimal, which is why they read 29°
+and −40° rather than round numbers. Each light, and the ambient, also takes a
+**colour**.
 
 **Shadows** come from the key light: **On the model** for self-shadowing, or
 **On the model and a floor**, which adds a floor that shows nothing *but* the
@@ -576,7 +626,10 @@ chasing the spin. **Floor shadow** sets its darkness.
 
 ### Layers & debug
 
-For looking at a material one part at a time. **Show** swaps the lit render
+**Quality** (render supersampling) is the first row here: Fast, Good (2×) or
+Best (3×), smoother edges for slower renders.
+
+The rest is for looking at a material one part at a time. **Show** swaps the lit render
 for a single channel, drawn unlit and without tone mapping:
 
 | View | What it is |
@@ -1009,7 +1062,8 @@ src/main.js           wiring: controls -> scene -> frame store -> exports
 src/scene.js          three.js scene, framing, lights, shadows
 src/loaders.js        format dispatch
 src/archive.js        the zip hunter: flatten, pick a model, find its textures
-src/materials.js      Classic and Physical materials, layer switches, debug views
+src/materials.js      Retro and Realistic materials, layer switches, debug views
+src/presets.js        the eight lighting presets for each path
 src/environment.js    the Studio and Soft sky environments, baked with PMREM
 src/mtl-fix.js        one .mtl repair, kept DOM-free so it can be tested
 src/dae-fix.js        the two Collada repairs

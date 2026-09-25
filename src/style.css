@@ -590,13 +590,43 @@ details.more[open] > summary { margin-bottom: 8px; }
 #rendering .row.actions { margin-top: 10px; }
 
 /*
- * Each path hides the controls that mean nothing on it: Phong's highlight
- * pair under physical materials, the environment under Classic, which never
- * uses one. The attribute is set from what Auto actually resolved to.
+ * Each setting hides the controls that mean nothing under it: Phong's
+ * highlight pair under Realistic, the environment under Retro, which never
+ * uses one, the ambient while an environment stands in for it, exposure with
+ * no tone mapping to apply it, and the floor's darkness with no floor. The
+ * attributes are set from main.js.
  */
 #rendering[data-shading="physical"] .classic-only,
 #rendering[data-shading="classic"] .pbr-only,
-#rendering[data-environment="lit"] .hemi-only { display: none; }
+#rendering[data-environment="lit"] .hemi-only,
+#rendering:not([data-environment="lit"]) .env-only,
+#rendering[data-tone="none"] .tone-only,
+#rendering:not([data-shadows="ground"]) .ground-only { display: none; }
+
+/* The quick lighting buttons: two rows of four. */
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin: 4px 0 2px;
+}
+.preset-grid button {
+  min-width: 0;
+  padding: 6px 4px;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* A phone leaves each button about 60px, and the touch gutter takes more. */
+@media (max-width: 480px) {
+  .preset-grid { gap: 4px; }
+  .preset-grid button { font-size: 12px; padding: 6px 2px; }
+}
+.preset-grid button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: #273654;      /* the accent, 22% over the panel */
+}
 #shading-note { margin: -2px 0 8px; }
 #shading-note:empty { display: none; }
 

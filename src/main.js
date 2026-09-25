@@ -14,6 +14,7 @@ import { baseName, stemOf, extOf, IMAGE_EXTENSIONS } from './archive.js';
 import { labelMeshes, toggleLabel, meshSummary } from './mesh-list.js';
 import { drawText, drawBand, layoutBand, isBlank } from './overlay-text.js';
 import { placeBackdrop } from './backdrop.js';
+import { PRESETS, PRESET_KEYS, presetValues, matchingPreset } from './presets.js';
 import { captureFrames, decodeFrames, storeSize } from './capture.js';
 import { loopSummary, FPS_LIMIT, frameAngles, frameDelaysMs,
          frameStarts, frameIndexAt } from './encoders/timing.js';
@@ -36,7 +37,7 @@ let rendering = false;
 
 const RANGE_IDS = ['elevation', 'start', 'fov', 'zoom', 'speed', 'fps',
   'ambient', 'key', 'fill', 'rim', 'specular', 'shininess',
-  'env-intensity', 'env-rotation', 'exposure',
+  'env-intensity', 'env-rotation', 'exposure', 'brightness',
   'key-azimuth', 'key-height', 'fill-azimuth', 'fill-height', 'shadow-darkness',
   'normal-strength', 'emission-strength',
   'pos-x', 'pos-y', 'pos-z', 'pitch', 'yaw', 'roll',
@@ -44,8 +45,9 @@ const RANGE_IDS = ['elevation', 'start', 'fov', 'zoom', 'speed', 'fps',
   'background-size', 'background-x', 'background-y'];
 
 // The Rendering section's choices. Like the Image section's, each one changes
-// what a render produces, so each drops the frame store.
-const RENDER_CHOICE_IDS = ['shading', 'environment', 'tone-mapping', 'key-color',
+// what a render produces, so each drops the frame store. Lighting ('shading')
+// has a listener of its own, since switching it can also switch the preset.
+const RENDER_CHOICE_IDS = ['environment', 'tone-mapping', 'key-color',
   'fill-color', 'ambient-color', 'shadows', 'debug-view', 'texture-filter',
   'double-sided'];
 
@@ -96,6 +98,7 @@ function readSettings() {
     envRotation: +$('env-rotation').value,
     toneMapping: $('tone-mapping').value,
     exposure: +$('exposure').value,
+    brightness: +$('brightness').value / 100,
     keyAzimuth: +$('key-azimuth').value,
     keyHeight: +$('key-height').value,
     keyColor: $('key-color').value,
@@ -416,6 +419,7 @@ function syncOutputs() {
     $(`${id}-out`).textContent = trim(+$(id).value);
   }
   $('shininess-out').textContent = $('shininess').value;
+  $('brightness-out').textContent = `${$('brightness').value}%`;
   for (const id of ['env-rotation', 'key-azimuth', 'key-height', 'fill-azimuth', 'fill-height']) {
     $(`${id}-out`).textContent = `${Math.round(+$(id).value)}°`;
   }
@@ -739,6 +743,7 @@ function schedulePreview() {
 
 function applyAndPreview() {
   syncOutputs();
+  syncLightingChrome();
   updateLoopInfo();
   drawPreviewCaption();          // which also refreshes the size readout
   if (playing) resyncCycle();   // frames/speed/direction may have moved
@@ -833,7 +838,9 @@ async function handleFile(file, choice = null) {
       file, { creaseAngle: DEFAULT_SETTINGS.smoothAngle, choice });
     scene.setModel(object);
     scene.setHiddenMeshes(hiddenMeshes);
+    pickLighting(!choice);
     scene.applySettings(readSettings());
+    syncLightingChrome();
     syncRenderingChrome();
     // From a zip, the model inside names the export — "Patchwork chair" reads
     // better than "patchwork_chair_obj_0".
@@ -1422,7 +1429,7 @@ const TEXT_RANGE = {
    */
   ambient: [0, 100], key: [0, 100], fill: [0, 100], rim: [0, 100],
   specular: [0, 100], shininess: [1, 1000],
-  'env-intensity': [0, 100], exposure: [0.01, 100],
+  'env-intensity': [0, 100], exposure: [0.01, 100], brightness: [0, 1000],
   'normal-strength': [0, 100], 'emission-strength': [0, 1000],
   'background-size': [0, 1000],
 };
@@ -1673,9 +1680,12 @@ function resetRendering() {
   setSliderValue('shadow-darkness', d.shadowDarkness);
   setSliderValue('normal-strength', d.normalStrength);
   setSliderValue('emission-strength', d.emissionStrength);
+  setSliderValue('brightness', d.brightness * 100);
   setLightAngles();
   $('quality').value = String(d.supersample);
-  $('shading').value = d.shading;
+  // Back to what the model asks for. Every light is at its default now, which
+  // is each path's first preset, so there is nothing to carry across.
+  $('shading').value = lightingMode = suggestedLighting ?? 'classic';
   $('environment').value = d.environment;
   $('tone-mapping').value = d.toneMapping;
   $('key-color').value = d.keyColor;
@@ -1755,25 +1765,152 @@ $('layer-list').addEventListener('change', (e) => {
 });
 
 /**
- * Say which path Auto chose, and hide the controls that mean nothing on it.
- * Only touches the DOM when the answer changes, since this runs on every
- * preview.
+ * Say which Lighting is in use and whether the model picked it, and refresh
+ * the layer counts. Only touches the DOM when the answer changes, since this
+ * runs on every preview.
  */
 let chromeKey = '';
 function syncRenderingChrome() {
   if (!scene.model) return;
   const { counts, total, shading } = scene.layerCounts();
-  const lit = shading === 'physical' && $('environment').value !== 'none';
-  const key = JSON.stringify([shading, counts, total, $('shading').value, lit]);
+  const key = JSON.stringify([shading, counts, total, suggestedLighting]);
   if (key === chromeKey) return;
   chromeKey = key;
-  $('rendering').dataset.shading = shading;
-  $('rendering').dataset.environment = lit ? 'lit' : 'none';
-  const chosen = $('shading').value === 'auto' ? 'Auto chose ' : 'Using ';
-  $('shading-note').textContent = shading === 'physical'
-    ? `${chosen}Physical: ${total} material${total === 1 ? '' : 's'}, lit by the environment too.`
-    : `${chosen}Classic: colour and colour map only, lit as it always has been.`;
+  const what = shading === 'physical'
+    ? `Realistic, ${total} material${total === 1 ? '' : 's'} lit by the environment too`
+    : 'Retro, colour and colour map only, lit as it always has been';
+  $('shading-note').textContent = shading === suggestedLighting
+    ? `Picked for this model: ${what}.`
+    : `Using ${what}. This model would pick ${LIGHTING_NAMES[suggestedLighting]}.`;
   renderLayerList();
+}
+
+/* ------------------------------------------------------------ lighting */
+
+const LIGHTING_NAMES = { physical: 'Realistic', classic: 'Retro' };
+
+/** Where each setting a preset decides lives among the controls. */
+const PRESET_CONTROLS = {
+  ambient: 'ambient', ambientColor: 'ambient-color',
+  keyLight: 'key', keyAzimuth: 'key-azimuth', keyHeight: 'key-height', keyColor: 'key-color',
+  fillLight: 'fill', fillAzimuth: 'fill-azimuth', fillHeight: 'fill-height',
+  fillColor: 'fill-color',
+  rimLight: 'rim', specular: 'specular', shininess: 'shininess',
+  environment: 'environment', envIntensity: 'env-intensity', envRotation: 'env-rotation',
+  toneMapping: 'tone-mapping', exposure: 'exposure',
+  shadows: 'shadows', shadowDarkness: 'shadow-darkness',
+};
+
+// Without half-float render targets there are no environments (see
+// applyCapabilityLimits), so a preset asking for one gets None here.
+const fitPreset = (values) =>
+  (scene.caps.halfFloat ? values : { ...values, environment: 'none' });
+
+/** Put a preset's lighting on the controls. The caller redraws. */
+function applyPreset(preset) {
+  const values = fitPreset(presetValues(preset, DEFAULT_SETTINGS));
+  for (const key of PRESET_KEYS) {
+    const id = PRESET_CONTROLS[key];
+    if (baseRanges.has(id)) setSliderValue(id, values[key]);
+    else $(id).value = values[key];
+  }
+}
+
+/** The preset the controls currently match exactly, if any. */
+function currentPreset(shading = $('shading').value) {
+  return matchingPreset(shading, readSettings(), DEFAULT_SETTINGS, fitPreset);
+}
+
+/** The eight buttons, rebuilt only when the Lighting changes. */
+let presetsFor = null;
+function renderPresets() {
+  const shading = $('shading').value;
+  if (shading === presetsFor) return;
+  presetsFor = shading;
+  $('presets').replaceChildren(...PRESETS[shading].map((preset) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = preset.label;
+    button.title = preset.title;
+    button.dataset.preset = preset.id;
+    button.setAttribute('aria-pressed', 'false');
+    return button;
+  }));
+}
+
+$('presets').addEventListener('click', (e) => {
+  const id = e.target.closest?.('button')?.dataset.preset;
+  const preset = PRESETS[$('shading').value].find((p) => p.id === id);
+  if (!preset) return;
+  applyPreset(preset);
+  discardStore();
+  applyAndPreview();
+});
+
+function setData(el, key, value) {
+  if (el.dataset[key] !== value) el.dataset[key] = value;
+}
+
+/**
+ * Show only the Advanced Lighting rows that do something under the current
+ * settings, and light up the preset they match. Cheap enough for every
+ * slider movement, which is how a hand-tuned light drops its preset's
+ * highlight the moment it stops being that preset.
+ */
+function syncLightingChrome() {
+  const section = $('rendering');
+  const shading = $('shading').value;
+  const lit = shading === 'physical' && $('environment').value !== 'none';
+  const chosenTone = $('tone-mapping').value;
+  const tone = chosenTone === 'auto' ? (shading === 'physical' ? 'neutral' : 'none') : chosenTone;
+  setData(section, 'shading', shading);
+  setData(section, 'environment', lit ? 'lit' : 'none');
+  setData(section, 'tone', tone === 'none' ? 'none' : 'on');
+  setData(section, 'shadows', $('shadows').value);
+  renderPresets();
+  const active = currentPreset()?.id ?? '';
+  for (const button of $('presets').children) {
+    const pressed = String(button.dataset.preset === active);
+    if (button.getAttribute('aria-pressed') !== pressed) button.setAttribute('aria-pressed', pressed);
+  }
+}
+
+/*
+ * Switching Lighting. Each path has presets of its own, so lighting that is
+ * still exactly one of the old path's presets becomes the new path's default
+ * — Glossy means nothing under Realistic. Anything tuned by hand is kept as
+ * it is: it was work, and the sliders it set still mean the same thing.
+ */
+let lightingMode = $('shading').value;
+function lightingSwitched() {
+  const from = lightingMode;
+  const to = $('shading').value;
+  lightingMode = to;
+  if (from === to) return;
+  if (currentPreset(from)) applyPreset(PRESETS[to][0]);
+}
+
+$('shading').addEventListener('input', () => {
+  lightingSwitched();
+  discardStore();
+  applyAndPreview();
+});
+
+/*
+ * Each model picks its Lighting as it loads: Realistic when its materials are
+ * physically based, Retro otherwise, including whenever the file does not
+ * say. Re-picking the texture or material file of the same model keeps a
+ * choice made by hand, unless the answer itself changed.
+ */
+let suggestedLighting = null;
+function pickLighting(newFile) {
+  const suggested = scene.resolveShading('auto');
+  const changed = suggested !== suggestedLighting;
+  suggestedLighting = suggested;
+  if ((newFile || changed) && $('shading').value !== suggested) {
+    $('shading').value = suggested;
+    lightingSwitched();
+  }
 }
 
 // Preview-only guides: deliberately not part of readSettings(), so toggling
