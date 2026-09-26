@@ -667,6 +667,12 @@ app always has; off, each material is drawn as its file says.
 
 ## Preview
 
+With a model loaded, **dragging** the render view orbits it (Start rotation and
+View angle), and **scrolling** over it zooms: one wheel notch is one step of
+the Zoom slider, scrolling up to zoom in. The wheel stops at the slider's ends
+but leaves a typed zoom beyond them alone, and Ctrl+scroll is still the
+browser's own page zoom.
+
 A **Preview** checkbox under the render view (off by default) spins the model
 live while every other control stays adjustable. It sits with **Center axis**
 and **Image border**: the three toggles that change what the preview shows

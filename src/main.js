@@ -1982,6 +1982,50 @@ for (const type of ['pointerup', 'pointercancel']) {
   canvas.addEventListener(type, () => { dragging = null; canvas.classList.remove('dragging'); });
 }
 
+/*
+ * Scroll over the preview to zoom: one wheel notch is one step of the Zoom
+ * slider, up to zoom in. A notch is about 100 pixels, or 3 lines in Firefox;
+ * a quick spin can arrive as one event carrying several notches, so the count
+ * comes from the size of the delta. A trackpad sends a stream of small deltas
+ * instead, and those are saved up until they add to a notch's worth.
+ *
+ * The wheel stops at the slider's own ends, but never snaps back a value that
+ * was typed past them. The change goes out as an ordinary input event on the
+ * slider, so it behaves exactly like dragging it.
+ */
+const WHEEL_NOTCH = 100;
+const WHEEL_NOTCH_LINES = 3;
+let wheelSaved = 0;
+$('stage').addEventListener('wheel', (e) => {
+  if (!scene.model || e.ctrlKey) return;     // ctrl+wheel stays the browser's zoom
+  e.preventDefault();                        // the panel must not scroll instead
+  const size = Math.abs(e.deltaY);
+  let ticks;
+  if (e.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
+    ticks = Math.sign(e.deltaY);
+  } else if (e.deltaMode === WheelEvent.DOM_DELTA_LINE) {
+    ticks = Math.sign(e.deltaY) * Math.max(1, Math.round(size / WHEEL_NOTCH_LINES));
+  } else if (size >= WHEEL_NOTCH / 2) {
+    ticks = Math.sign(e.deltaY) * Math.max(1, Math.round(size / WHEEL_NOTCH));
+    wheelSaved = 0;
+  } else {
+    wheelSaved += e.deltaY;
+    ticks = Math.trunc(wheelSaved / WHEEL_NOTCH);
+    wheelSaved -= ticks * WHEEL_NOTCH;
+  }
+  if (!ticks) return;
+
+  const zoom = $('zoom');
+  const { min, max, step } = baseRanges.get('zoom');
+  const value = +zoom.value;
+  const next = Math.min(Math.max(max, value), Math.max(Math.min(min, value),
+    Math.round((value - ticks * +step) * 100) / 100));
+  if (next === value) return;
+  setSliderValue('zoom', next);
+  zoom.dispatchEvent(new Event('input', { bubbles: true }));
+  zoom.dispatchEvent(new Event('change', { bubbles: true }));
+}, { passive: false });
+
 /* -------------------------------------------------------- render frames */
 
 $('render').addEventListener('click', async () => {
