@@ -16,7 +16,7 @@
  * against ~8 ms for the fflate path. See src/encoders/png.js.
  */
 
-import { frameAngles } from './encoders/timing.js';
+import { framePoses } from './encoders/timing.js';
 import { encodePng } from './encoders/png.js';
 import { drawText, drawBand, layoutBand } from './overlay-text.js';
 import { drawBackdrop } from './backdrop.js';
@@ -101,7 +101,8 @@ function makeResolver(width, height, caption, backdrop) {
 export async function captureFrames(scene, spin, onProgress, caption = null,
   backdrop = null) {
   const { width, height } = scene.settings;
-  const angles = frameAngles(spin.frames, spin.clockwise);
+  // [spin, tumble, roll] per frame; see framePoses().
+  const poses = framePoses(spin.frames, spin);
   // The renderer no longer paints the background, so the composer does.
   const { resolve, height: outHeight } = makeResolver(width, height, caption, backdrop);
   const blobs = [];
@@ -112,15 +113,15 @@ export async function captureFrames(scene, spin, onProgress, caption = null,
   if (axisWasVisible) scene.setAxisVisible(false);
 
   try {
-    for (let i = 0; i < angles.length; i++) {
-      scene.setAngle(angles[i]);
+    for (let i = 0; i < poses.length; i++) {
+      scene.setAngle(...poses[i]);
       scene.render();
 
       // PNG keeps the frame store lossless; see the note at the top of the file.
       const png = encodePng(resolve(scene.canvas));
       blobs.push(new Blob([png], { type: 'image/png' }));
 
-      if (onProgress && onProgress(i + 1, angles.length) === false) return null;
+      if (onProgress && onProgress(i + 1, poses.length) === false) return null;
       // Yield so the progress bar can actually paint between frames.
       if ((i & 3) === 3) await new Promise((r) => setTimeout(r, 0));
     }

@@ -669,6 +669,7 @@ details.more[open] > summary { margin-bottom: 8px; }
 #text-band textarea { min-height: calc(3em + 12px); }
 #text-blocks[hidden], #text-band[hidden], #text-style[hidden],
 #text-stroke-row[hidden] { display: none; }
+#tumble-ratio-row[hidden], #roll-ratio-row[hidden] { display: none; }
 
 #replacers[hidden] { display: none; }
 /*

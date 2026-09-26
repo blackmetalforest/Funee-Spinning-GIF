@@ -143,6 +143,43 @@
         <span class="muted small" id="frames-note">frame rate ÷ spin speed</span>
         <output id="frames-out">100</output></div>
       <p id="loop-info" class="muted small">—</p>
+
+      <!--
+        Two more axes, each turning at a whole-number ratio to the spin so the
+        loop still closes (see SPIN_RATIOS in src/encoders/timing.js). A speed
+        row is hidden while its axis is off.
+      -->
+      <details class="more" id="spin-more">
+        <summary>Advanced</summary>
+        <p class="muted small">Turn about two more axes while it spins. Speeds are
+          spin turns : this axis's turns, so 1:2 turns twice per spin, and 2:1
+          once every two spins, which makes the loop two spins long.</p>
+        <div class="row"><label for="tumble-dir">Tumble</label>
+          <select id="tumble-dir"
+                  title="Head over heels, about the left–right axis. Clockwise as seen from the right.">
+            <option value="off" selected>Off</option>
+            <option value="cw">Clockwise</option>
+            <option value="ccw">Counter-clockwise</option>
+          </select></div>
+        <div class="row" id="tumble-ratio-row" hidden><label for="tumble-ratio">Tumble speed</label>
+          <input type="range" id="tumble-ratio" min="0" max="8" step="1" value="4" list="spin-ratio-marks">
+          <output for="tumble-ratio" id="tumble-ratio-out">1:1</output></div>
+        <div class="row"><label for="roll-dir">Roll</label>
+          <select id="roll-dir"
+                  title="Like a wheel, about the axis pointing at you. Clockwise as you see it.">
+            <option value="off" selected>Off</option>
+            <option value="cw">Clockwise</option>
+            <option value="ccw">Counter-clockwise</option>
+          </select></div>
+        <div class="row" id="roll-ratio-row" hidden><label for="roll-ratio">Roll speed</label>
+          <input type="range" id="roll-ratio" min="0" max="8" step="1" value="4" list="spin-ratio-marks">
+          <output for="roll-ratio" id="roll-ratio-out">1:1</output></div>
+        <datalist id="spin-ratio-marks">
+          <option value="0"></option><option value="1"></option><option value="2"></option>
+          <option value="3"></option><option value="4"></option><option value="5"></option>
+          <option value="6"></option><option value="7"></option><option value="8"></option>
+        </datalist>
+      </details>
     </section>
 
     <section class="group">

@@ -118,3 +118,64 @@ export function frameAngles(nFrames, clockwise = true, start = 0) {
   const sign = clockwise ? -1 : 1;
   return Array.from({ length: n }, (_, i) => start + sign * step * i);
 }
+
+/*
+ * Two extra axes to turn about while the model spins: Tumble, about the
+ * left–right axis, and Roll, about the axis pointing at the viewer.
+ *
+ * Each runs at a fixed ratio to the main spin, written main turns : this
+ * axis's turns. A free speed would almost never come back to where it started
+ * on the same frame as the spin, so the loop would jump; a whole-number ratio
+ * always does. 1:3 turns the axis three times per spin and still loops after
+ * one spin. 3:1 turns it once every three spins, so the loop has to run three
+ * spins long, and costs three times the frames. Capping the ratios at 5 caps
+ * that, although two axes at 4:1 and 5:1 need 20 spins between them to line
+ * up — the frame count shows it, and warns as it would for any long loop.
+ */
+export const SPIN_RATIOS = [
+  { label: '5:1', main: 5, spins: 1 },
+  { label: '4:1', main: 4, spins: 1 },
+  { label: '3:1', main: 3, spins: 1 },
+  { label: '2:1', main: 2, spins: 1 },
+  { label: '1:1', main: 1, spins: 1 },
+  { label: '1:2', main: 1, spins: 2 },
+  { label: '1:3', main: 1, spins: 3 },
+  { label: '1:4', main: 1, spins: 4 },
+  { label: '1:5', main: 1, spins: 5 },
+];
+
+function gcd(a, b) {
+  return b ? gcd(b, a % b) : a;
+}
+
+/**
+ * How many main-spin turns one seamless loop takes: the smallest number that
+ * every extra axis also finishes a whole number of turns in.
+ */
+export function loopTurns(axes = []) {
+  return axes.reduce((turns, { main }) => (turns * main) / gcd(turns, main), 1);
+}
+
+/**
+ * The pose of every frame, as [spin, tumble, roll] in degrees.
+ *
+ * `turns` is loopTurns() for `axes`; each axis is { axis: 'x' | 'z', main,
+ * spins, clockwise }. With no extra axes the spin angles are frameAngles()'s
+ * to the last bit — the step is computed the same way — so adding the axes
+ * changes nothing about an ordinary spin's export.
+ */
+export function framePoses(nFrames, { clockwise = true, turns = 1, axes = [] } = {}) {
+  const n = Math.max(1, Math.floor(nFrames));
+  const step = (360 * turns) / n;
+  const sign = clockwise ? -1 : 1;
+  const extra = axes.map(({ axis, main, spins, clockwise: cw }) => ({
+    index: axis === 'x' ? 1 : 2,
+    step: (360 * turns * spins) / main / n,
+    sign: cw ? -1 : 1,
+  }));
+  return Array.from({ length: n }, (_, i) => {
+    const pose = [0 + sign * step * i, 0, 0];     // 0 + as frameAngles(): no -0
+    for (const e of extra) pose[e.index] = 0 + e.sign * e.step * i;
+    return pose;
+  });
+}

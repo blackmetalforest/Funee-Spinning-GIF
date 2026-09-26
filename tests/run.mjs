@@ -13,7 +13,8 @@ import { dirname, join } from 'path';
 import vm from 'vm';
 
 import { frameDelaysMs, loopSummary, frameAngles, roundHalfToEven,
-         frameStarts, frameIndexAt } from '../src/encoders/timing.js';
+         frameStarts, frameIndexAt, SPIN_RATIOS, loopTurns,
+         framePoses } from '../src/encoders/timing.js';
 import { muxAnimation } from '../src/encoders/webp.js';
 import { muxApng } from '../src/encoders/apng.js';
 import { encodePng } from '../src/encoders/png.js';
@@ -71,6 +72,59 @@ check('starts at 0', angles[0] === 0);
 check('no repeated pose at the wrap', Math.abs(angles[23]) !== 360);
 check('even 15 deg steps', Math.abs(Math.abs(angles[1] - angles[0]) - 15) < 1e-9);
 check('counter-clockwise flips sign', frameAngles(4, false)[1] > 0);
+
+console.log('\nextra spin axes');
+{
+  check('nine ratios, 5:1 to 1:5, 1:1 in the middle',
+    SPIN_RATIOS.length === 9 && SPIN_RATIOS[0].label === '5:1'
+    && SPIN_RATIOS[4].label === '1:1' && SPIN_RATIOS[8].label === '1:5');
+  check('never more than 5 to 1 either way',
+    SPIN_RATIOS.every(({ main, spins }) => Math.max(main, spins) <= 5 && Math.min(main, spins) === 1));
+  const r = (label) => SPIN_RATIOS.find((x) => x.label === label);
+  check('no extra axes: one spin per loop', loopTurns([]) === 1);
+  check('faster axes never lengthen the loop', loopTurns([r('1:5'), r('1:3')]) === 1);
+  check('3:1 needs three spins', loopTurns([r('3:1')]) === 3);
+  check('2:1 with 4:1 needs four', loopTurns([r('2:1'), r('4:1')]) === 4);
+  check('4:1 with 5:1 needs twenty', loopTurns([r('4:1'), r('5:1')]) === 20);
+
+  // Without extra axes the spin angles are frameAngles()'s to the last bit,
+  // which is what keeps an ordinary export byte-identical.
+  let same = true;
+  for (const n of [1, 7, 24, 48, 100, 333]) {
+    for (const cw of [true, false]) {
+      const a = frameAngles(n, cw);
+      const p = framePoses(n, { clockwise: cw });
+      if (!a.every((v, i) => Object.is(v, p[i][0]) && p[i][1] === 0 && p[i][2] === 0)) same = false;
+    }
+  }
+  check('no extra axes: identical to frameAngles', same);
+
+  // Every axis must land on a whole turn one step past the last frame, and
+  // never on one before it, or the loop would repeat or jump.
+  const closes = (poses, n, step) => [0, 1, 2].every((k) => {
+    const next = poses[n - 1][k] + step[k];
+    return Math.abs(next / 360 - Math.round(next / 360)) < 1e-9;
+  });
+  for (const [ta, ra] of [['1:1', '1:1'], ['3:1', '1:2'], ['4:1', '5:1'], ['2:1', '1:5']]) {
+    const axes = [{ axis: 'x', ...r(ta), clockwise: true }, { axis: 'z', ...r(ra), clockwise: false }];
+    const turns = loopTurns(axes);
+    const n = 30 * turns;
+    const poses = framePoses(n, { clockwise: true, turns, axes });
+    const step = [0, 1, 2].map((k) => poses[1][k] - poses[0][k]);
+    // ...and no earlier frame is the starting pose, or the loop is longer
+    // than it needs to be.
+    const repeats = poses.slice(1).some((p) => p.every((v) =>
+      Math.abs(v / 360 - Math.round(v / 360)) < 1e-9));
+    check(`tumble ${ta}, roll ${ra}: the loop closes after ${turns} spin(s)`,
+      closes(poses, n, step) && !repeats);
+  }
+  const axes = [{ axis: 'x', ...r('1:2'), clockwise: true }];
+  const p = framePoses(40, { clockwise: true, turns: 1, axes });
+  check('1:2 tumbles twice as fast as it spins', Math.abs(p[1][1] - 2 * p[1][0]) < 1e-9);
+  check('roll stays still while only tumble is on', p.every((q) => q[2] === 0));
+  check('counter-clockwise flips an extra axis',
+    framePoses(4, { axes: [{ axis: 'z', ...r('1:1'), clockwise: false }] })[1][2] > 0);
+}
 
 console.log('\nplayback lookup');
 // The live preview asks which frame belongs to a clock reading rather than

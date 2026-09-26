@@ -46,6 +46,8 @@ Tip: change the Address → We Love Katamari
   brightness** slider; every individual light is still there underneath
 - Produces a **seamless loop** — frame *i* sits at exactly `i × 360/N` degrees,
   so the last frame steps into the first with no repeated pose
+- Can **tumble** and **roll** the model as it spins, at whole-number ratios
+  to the spin so the loop still closes
 - Takes a spin speed and a frame rate and works out the frame count for you,
   flagging it when that count gets expensive. Either one at zero is a stopped
   spin, which exports as a single still
@@ -416,6 +418,39 @@ info line. When they turn out to be wrong, the **Vertex colours** switch under
 pure red, yellow and blue that otherwise paints the whole camera. And where a bundle ships several exports of the same model, only an
 obvious derived variant (`_bake`, `_LOD3`, `collision`) is pushed down the
 ranking; choosing between the rest is what the Advanced panel is for.
+
+## Extra spin axes
+
+The Spin section's **Advanced** disclosure adds two more axes to turn about
+while the model spins: **Tumble**, head over heels about the left–right axis,
+and **Roll**, like a wheel about the axis pointing at you. Each is **Off** by
+default, or **Clockwise** or **Counter-clockwise** — Tumble as seen from the
+right, Roll as you see it. The spinning model is turned as a whole, so the two
+combine with the spin rather than replacing it.
+
+Each axis's speed slider snaps to a ratio of the spin speed, written *spin
+turns : this axis's turns*, from **5:1** to **1:5** with **1:1** in the middle.
+A free speed would almost never come back to where it started on the same
+frame as the spin, and the loop would jump; a whole-number ratio always does.
+
+- Faster ratios (1:2 to 1:5) turn the axis several times per spin, and the
+  loop is still one spin long.
+- Slower ratios (2:1 to 5:1) turn it once every few spins, so the loop has to
+  last that many spins, and it takes that many times the frames. The loop is
+  the smallest number of spins that every axis finishes whole turns in: 3:1
+  and 2:1 together need 6, and 4:1 with 5:1 need 20.
+
+The frame count and the loop line under it include all of this — "frame rate ÷
+spin speed × 3 spins", "10.00 s/loop of 3 spins" — and warn or cap as they
+would for any long loop. The poses come from `framePoses()` in
+[src/encoders/timing.js](src/encoders/timing.js); with both axes off, its spin
+angles are the old ones to the last bit, so an ordinary spin exports exactly
+as before.
+
+A **floor shadow** normally sits right under the model, because turning about
+a vertical axis never changes a point's height. Tumble and Roll do, so while
+either is on the floor goes under the lowest point any frame can reach, and
+the model never passes through it.
 
 ## Position
 

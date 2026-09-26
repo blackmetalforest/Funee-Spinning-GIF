@@ -30,6 +30,8 @@ export const UP_AXES = ['Y', 'Z', 'X'];
 // Hoisted: setAngle() runs once per frame of the live preview, and allocating a
 // vector per call is pure garbage for the collector to chase.
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
+const WORLD_X = new THREE.Vector3(1, 0, 0);
+const WORLD_Z = new THREE.Vector3(0, 0, 1);
 /* The clear colour. Only its alpha of 0 matters — see render(). */
 const BLACK = new THREE.Color(0x000000);
 const scratch = new THREE.Vector3();
@@ -84,6 +86,8 @@ export const DEFAULT_SETTINGS = {
   pitch: 0,
   yaw: 0,
   roll: 0,
+  // Whether Tumble or Roll is on, which is all the floor needs to know.
+  tumbling: false,
   fov: 35,
   zoom: 1.0,
   background: '#181a20',
@@ -294,6 +298,12 @@ export class SpinScene {
    * changes a point's height, so the lowest point is the same at every frame
    * and the floor can be placed once rather than chasing the spin.
    *
+   * Tumble and Roll do change heights. The floor then goes under the lowest
+   * point any frame can reach — the bottom of the sphere the model is
+   * normalised into, pushed out by the Position offset — so nothing ever
+   * passes through it, at the cost of a gap at frames where the model is
+   * upright.
+   *
    * Measured precisely (vertex by vertex): a floor placed from the loose box
    * floats visibly below a model whose extremes are curved.
    */
@@ -302,14 +312,18 @@ export class SpinScene {
     const wanted = s.shadows === 'ground' && !!this.model;
     this.ground.visible = wanted;
     if (!wanted) return;
-    const key = [s.upAxis, s.posX, s.posY, s.posZ, s.pitch, s.yaw, s.roll].join();
+    const reach = Math.hypot(s.posX, s.posY, s.posZ);
+    const key = [s.upAxis, s.posX, s.posY, s.posZ, s.pitch, s.yaw, s.roll, s.tumbling].join();
     if (key !== this.groundKey) {
       this.groundKey = key;
-      this.pivot.updateMatrixWorld(true);
-      const box = new THREE.Box3().setFromObject(this.model, true);
-      this.groundY = box.isEmpty() ? -1 : box.min.y;
+      if (s.tumbling) {
+        this.groundY = -(1 + reach);
+      } else {
+        this.pivot.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(this.model, true);
+        this.groundY = box.isEmpty() ? -1 : box.min.y;
+      }
     }
-    const reach = Math.hypot(s.posX, s.posY, s.posZ);
     this.ground.position.set(0, this.groundY - 1e-3, 0);
     this.ground.scale.setScalar(4 + 2 * reach);
     this.ground.material.opacity = s.shadowDarkness;
@@ -890,8 +904,12 @@ export class SpinScene {
     this.placeLights();
   }
 
-  /** Point the model at a given spin angle, in degrees. */
-  setAngle(degrees) {
+  /**
+   * Point the model at a given spin angle, in degrees, and optionally a tumble
+   * (about world X, left–right) and a roll (about world Z, toward the
+   * viewer) on top of it — the Spin section's extra axes.
+   */
+  setAngle(degrees, tumble = 0, roll = 0) {
     const total = THREE.MathUtils.degToRad(this.settings.startAngle + degrees);
     // Rebuild from scratch each time: apply the up-axis correction, then spin
     // about world Y. Accumulating rotations here would drift over a long loop.
@@ -900,6 +918,10 @@ export class SpinScene {
     if (s.upAxis === 'Z') this.pivot.rotateX(-Math.PI / 2);
     else if (s.upAxis === 'X') this.pivot.rotateZ(Math.PI / 2);
     this.pivot.rotateOnWorldAxis(WORLD_UP, total);
+    // The spinning model is then turned as a whole. Every angle is back on a
+    // whole turn at the end of the loop, so the loop closes whatever the order.
+    if (tumble) this.pivot.rotateOnWorldAxis(WORLD_X, THREE.MathUtils.degToRad(tumble));
+    if (roll) this.pivot.rotateOnWorldAxis(WORLD_Z, THREE.MathUtils.degToRad(roll));
   }
 
   /**

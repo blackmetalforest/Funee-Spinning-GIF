@@ -16,8 +16,8 @@ import { drawText, drawBand, layoutBand, isBlank } from './overlay-text.js';
 import { placeBackdrop } from './backdrop.js';
 import { PRESETS, PRESET_KEYS, presetValues, matchingPreset } from './presets.js';
 import { captureFrames, decodeFrames, storeSize } from './capture.js';
-import { loopSummary, FPS_LIMIT, frameAngles, frameDelaysMs,
-         frameStarts, frameIndexAt } from './encoders/timing.js';
+import { loopSummary, FPS_LIMIT, frameDelaysMs, frameStarts, frameIndexAt,
+         SPIN_RATIOS, loopTurns, framePoses } from './encoders/timing.js';
 import { encodeGif } from './encoders/gif.js';
 import { muxAnimation, encodeStill } from './encoders/webp.js';
 import { muxApng } from './encoders/apng.js';
@@ -80,6 +80,7 @@ function readSettings() {
     pitch: +$('pitch').value,
     yaw: +$('yaw').value,
     roll: +$('roll').value,
+    tumbling: readExtraAxes().length > 0,
     fov: +$('fov').value,
     zoom: +$('zoom').value,
     background: $('background').value,
@@ -157,10 +158,37 @@ function framesFor(fps, rps) {
   };
 }
 
+/** The Spin section's extra axes, as their direction and speed controls say. */
+const EXTRA_AXES = [
+  { axis: 'x', dir: 'tumble-dir', ratio: 'tumble-ratio' },
+  { axis: 'z', dir: 'roll-dir', ratio: 'roll-ratio' },
+];
+
+function readExtraAxes() {
+  return EXTRA_AXES
+    .filter(({ dir }) => $(dir).value !== 'off')
+    .map(({ axis, dir, ratio }) => {
+      const { main, spins } = SPIN_RATIOS[clampInt($(ratio).value, 0, SPIN_RATIOS.length - 1, 4)];
+      return { axis, main, spins, clockwise: $(dir).value === 'cw' };
+    });
+}
+
+/*
+ * One loop is `turns` turns of the main spin — one, unless an extra axis is
+ * slower than the spin and has to be waited for — and every figure that
+ * times the file is per loop: the frame count covers all of it, and `rps` is
+ * loops per second, which is what the delay tables divide up.
+ */
 function readSpin() {
-  const rps = +$('speed').value;
-  const { frames, stopped } = framesFor(+$('fps').value, rps);
-  return { frames, rps, stopped, clockwise: $('direction').value === 'cw' };
+  const turnRps = +$('speed').value;
+  const axes = readExtraAxes();
+  const turns = loopTurns(axes);
+  const { frames, ideal, stopped } = framesFor(+$('fps').value, turnRps / turns);
+  return {
+    frames, ideal, stopped, turns, axes,
+    rps: turnRps / turns,
+    clockwise: $('direction').value === 'cw',
+  };
 }
 
 function clampInt(value, lo, hi, fallback) {
@@ -419,6 +447,10 @@ function syncOutputs() {
     $(`${id}-out`).textContent = trim(+$(id).value);
   }
   $('shininess-out').textContent = $('shininess').value;
+  for (const { dir, ratio } of EXTRA_AXES) {
+    $(`${ratio}-out`).textContent = SPIN_RATIOS[+$(ratio).value]?.label ?? '';
+    $(`${ratio}-row`).hidden = $(dir).value === 'off';
+  }
   $('brightness-out').textContent = `${$('brightness').value}%`;
   for (const id of ['env-rotation', 'key-azimuth', 'key-height', 'fill-azimuth', 'fill-height']) {
     $(`${id}-out`).textContent = `${Math.round(+$(id).value)}°`;
@@ -444,7 +476,7 @@ function syncOutputs() {
  * which the loop summary underneath then shows as a lower figure.
  */
 function syncFrameCount() {
-  const { frames, ideal, stopped } = framesFor(+$('fps').value, +$('speed').value);
+  const { frames, ideal, stopped, turns } = readSpin();
   const out = $('frames-out');
   out.textContent = frames;
   if (stopped) {
@@ -458,7 +490,7 @@ function syncFrameCount() {
   out.classList.toggle('caution', frames < FRAMES_MAX && frames >= FRAMES_HEAVY);
   $('frames-note').textContent = ideal > FRAMES_MAX
     ? `capped from ${ideal.toLocaleString()}`
-    : 'frame rate ÷ spin speed';
+    : turns > 1 ? `frame rate ÷ spin speed × ${turns} spins` : 'frame rate ÷ spin speed';
 }
 
 function updateLoopInfo() {
@@ -477,9 +509,12 @@ function updateLoopInfo() {
     ? `<span class="warn">${fps} fps</span>`
     : `${fps} fps`;
   const plural = spin.frames === 1 ? 'frame' : 'frames';
+  // A loop of several spins is quoted as a loop, with the spin rate still
+  // per turn, since that is what the Spin speed slider sets.
+  const length = spin.turns > 1 ? `${seconds} s/loop of ${spin.turns} spins` : `${seconds} s/turn`;
   $('loop-info').innerHTML =
-    `${spin.frames} ${plural} · ${seconds} s/turn · ${fpsHtml} · ` +
-    `${info.actualRps.toFixed(3)} rounds/s`;
+    `${spin.frames} ${plural} · ${length} · ${fpsHtml} · ` +
+    `${(info.actualRps * spin.turns).toFixed(3)} rounds/s`;
 }
 
 /*
@@ -586,7 +621,7 @@ const cycle = { angles: [], starts: [], totalMs: 0 };
 
 function rebuildCycle() {
   const spin = readSpin();
-  cycle.angles = frameAngles(spin.frames, spin.clockwise);
+  cycle.angles = framePoses(spin.frames, spin);
   // GIF's grid, the same one #loop-info quotes: the coarsest of the formats,
   // and the only one whose quantisation is visible as judder.
   const { starts, totalMs } = frameStarts(frameDelaysMs(spin.frames, spin.rps, 'gif'));
@@ -618,7 +653,7 @@ function advancePlayback(now) {
   const index = playbackIndexAt(now);
   if (index === shownIndex) return false;
   shownIndex = index;
-  scene.setAngle(cycle.angles[index]);
+  scene.setAngle(...cycle.angles[index]);
   return true;
 }
 
@@ -727,7 +762,7 @@ function schedulePreview() {
     // on every change — most of a slider drag, at low frame rates.
     if (playing) {
       shownIndex = playbackIndexAt(performance.now());
-      scene.setAngle(cycle.angles[shownIndex]);
+      scene.setAngle(...cycle.angles[shownIndex]);
     } else {
       scene.setAngle(0);
     }
@@ -1559,7 +1594,7 @@ for (const id of RANGE_IDS) {
   $(id).addEventListener('change', () => normaliseRange(id));
 }
 for (const id of ['up-axis', 'direction', 'quality', 'background', 'background-mode',
-  'width', 'height']) {
+  'width', 'height', 'tumble-dir', 'tumble-ratio', 'roll-dir', 'roll-ratio']) {
   $(id).addEventListener('input', () => { discardStore(); applyAndPreview(); });
 }
 
@@ -2099,6 +2134,7 @@ document.querySelectorAll('.save').forEach((button) => {
 async function saveAs(format) {
   if (!store) return;
   const spin = readSpin();
+  const loopWord = spin.turns > 1 ? `loop of ${spin.turns} spins` : 'turn';
   const settings = readSettings();
   setBusy(`Building ${FORMAT_LABELS[format]}…`);
   setSaveEnabled(false);
@@ -2118,7 +2154,7 @@ async function saveAs(format) {
         dither: $('dither').checked,
       });
       blob = gifBlob;
-      note = `${info.totalMs} ms per turn`;
+      note = `${info.totalMs} ms per ${loopWord}`;
     } else if (format === 'webp') {
       const frames = await decodeFrames(store);
       const info = loopSummary(frames.length, spin.rps, 'webp');
@@ -2132,7 +2168,7 @@ async function saveAs(format) {
       blob = new Blob([muxAnimation(stills, {
         width: store.width, height: store.height, loop: 0,
       })], { type: 'image/webp' });
-      note = `${info.totalMs} ms per turn`;
+      note = `${info.totalMs} ms per ${loopWord}`;
     } else if (format === 'apng') {
       // No decode and no re-encode: the store is already PNG.
       const info = loopSummary(store.blobs.length, spin.rps, 'apng');
@@ -2147,7 +2183,7 @@ async function saveAs(format) {
         width: store.width, height: store.height, loop: 0,
       })], { type: 'image/apng' });
       extension = 'png';
-      note = `${info.totalMs} ms per turn · lossless`;
+      note = `${info.totalMs} ms per ${loopWord} · lossless`;
     } else if (format === 'zip') {
       blob = await encodeZip(store, { name: `${modelName}_frames` });
       note = `${store.blobs.length} PNG frames`;
