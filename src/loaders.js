@@ -35,6 +35,7 @@ import {
 } from './archive.js';
 import { sanitiseMtl } from './mtl-fix.js';
 import { promoteOnlyUvSet, applySamplerWraps } from './dae-fix.js';
+import { loadPictureModel, PICTURE_MODEL_EXTENSIONS } from './image-model.js';
 
 export const SUPPORTED_EXTENSIONS = [
   'glb', 'gltf', 'obj', 'stl', 'ply', 'dae', '3mf', 'fbx', 'usdz', 'vox', '3ds',
@@ -43,7 +44,14 @@ export const SUPPORTED_EXTENSIONS = [
 /** Archives are offered alongside the model formats themselves. */
 export const ARCHIVE_EXTENSIONS = ['zip'];
 
-export const FILE_ACCEPT = [...SUPPORTED_EXTENSIONS, ...ARCHIVE_EXTENSIONS]
+/**
+ * Pictures load as a flat card (src/image-model.js). Kept out of
+ * SUPPORTED_EXTENSIONS on purpose: inside a zip a picture is a texture, never
+ * the model.
+ */
+export { PICTURE_MODEL_EXTENSIONS };
+
+export const FILE_ACCEPT = [...SUPPORTED_EXTENSIONS, ...ARCHIVE_EXTENSIONS, ...PICTURE_MODEL_EXTENSIONS]
   .map((e) => `.${e}`).join(',');
 
 /** Formats that carry textures inside a single file — the friction-free ones. */
@@ -218,19 +226,27 @@ function localOnlyManager(blocked) {
  * Load a model from a File/Blob. Returns { object, stats, report }.
  * `creaseAngle` matches the desktop app's --smooth flag.
  */
-export async function loadModel(file, { creaseAngle = 40, choice = null } = {}) {
+export async function loadModel(file, { creaseAngle = 40, choice = null, onProgress = null } = {}) {
   const ext = extensionOf(file.name);
   if (ext === 'zip') return loadArchive(file, { creaseAngle, choice });
+  if (PICTURE_MODEL_EXTENSIONS.includes(ext)) {
+    const { object, image } = await loadPictureModel(file, ext, { onProgress });
+    repairMaterials(object, ext);
+    return { object, stats: { ...describe(object, ext), blocked: [], image }, report: null };
+  }
 
   const buffer = await file.arrayBuffer();
   const blocked = [];
   const manager = localOnlyManager(blocked);
+  const idle = trackLoads(manager);
   const result = await parseModel(ext, buffer, { creaseAngle, manager });
   const object = normalise(result, creaseAngle);
   if (!hasMesh(object)) {
     throw new Error('That file contains no meshes to render');
   }
-  repairMaterials(object);
+  // Embedded textures are still decoding; their alpha is read below.
+  await idle();
+  repairMaterials(object, ext);
   return { object, stats: { ...describe(object, ext), blocked }, report: null };
 }
 
@@ -498,7 +514,7 @@ async function loadFromArchive(index, candidate, { creaseAngle, choice, warnings
     revoke();
   }
 
-  repairMaterials(object);
+  repairMaterials(object, ext);
   return { object, stats: describe(object, ext), report };
 }
 
@@ -858,7 +874,7 @@ function attachCompanions(material, colourPath, index, load, report) {
  */
 const CRUSHED_TINT = 0.15;
 
-function repairMaterials(object) {
+function repairMaterials(object, ext) {
   object.traverse((child) => {
     if (!child.isMesh) return;
     for (const material of materialsOf(child)) {
@@ -878,7 +894,120 @@ function repairMaterials(object) {
     }
     // Invisible materials, whatever the format they came from.
     for (const material of materialsOf(child)) if (material) unhide(material);
+    // glTF states its alpha mode outright, and OPAQUE means "ignore the
+    // alpha channel", so only the formats that leave it unsaid are guessed.
+    if (ext !== 'gltf' && ext !== 'glb') {
+      for (const material of materialsOf(child)) if (material) useMapAlpha(material);
+    }
   });
+}
+
+/**
+ * Honour the alpha channel of a colour map the file forgot to mention.
+ *
+ * OBJ, Collada and FBX have no reliable way to say "this texture has holes
+ * in it": a .mtl says d 1 for PaRappa's cut-out hat as readily as for a solid
+ * crate. three.js takes the file at its word and draws the material opaque,
+ * so every transparent pixel shows its colour instead — almost always black.
+ * Game rips are full of these: eyes, brows, hair cards, mouths.
+ *
+ * So the map itself is read, and the material is only touched when the file
+ * said nothing about transparency (not blended, no alpha test) and the map
+ * really does have see-through pixels:
+ *
+ *  - **Cut-out** (alpha test at half), when the alpha is on/off with at most
+ *    soft edges. This is how the consoles these rips come from drew it, and it
+ *    stays in the opaque pass, so nothing needs sorting.
+ *  - **Blended**, when the see-through part is mostly in-between values — a
+ *    bubble or a pane of glass — which a cut-out would erase or fill.
+ *
+ * A map whose alpha never drops below half is left alone: a cut-out would
+ * change nothing, and it is more likely a specular mask than transparency.
+ * The Transparency layer switch turns either result back off.
+ */
+const ALPHA_CUTOFF = 0.5;
+const SOFT_SHARE = 0.25;          // in-between share of see-through pixels that means "blended"
+const ALPHA_SAMPLE = 256;         // big maps are read at most this size
+const alphaKinds = new WeakMap(); // image -> 'none' | 'cutout' | 'blend'
+
+function useMapAlpha(material) {
+  const image = material.map?.image;
+  if (!image || material.transparent || material.alphaTest > 0 || material.alphaMap) return;
+  let kind = alphaKinds.get(image);
+  if (kind === undefined) {
+    kind = alphaKindOfAll(material.map.userData.animation?.frames ?? [image]);
+    alphaKinds.set(image, kind);
+  }
+  if (kind === 'cutout') material.alphaTest = ALPHA_CUTOFF;
+  else if (kind === 'blend') material.transparent = true;
+  else return;
+  material.needsUpdate = true;
+}
+
+/**
+ * The same question for an animated texture, asked of a spread of its frames:
+ * one frame with a blended edge makes the whole animation blended.
+ */
+const ALPHA_FRAMES = 8;
+
+function alphaKindOfAll(images) {
+  const step = Math.max(1, Math.floor(images.length / ALPHA_FRAMES));
+  let result = 'none';
+  for (let i = 0; i < images.length; i += step) {
+    const kind = alphaKindOf(images[i]);
+    if (kind === 'blend') return kind;
+    if (kind === 'cutout') result = kind;
+  }
+  return result;
+}
+
+/** How a texture image uses its alpha channel. Never throws. */
+function alphaKindOf(image) {
+  try {
+    const alpha = alphaValues(image);
+    if (!alpha) return 'none';
+    const cutoff = Math.round(ALPHA_CUTOFF * 255);
+    let clear = 0;      // below the cut-off
+    let soft = 0;       // see-through, but not fully
+    let seeThrough = 0;
+    for (const a of alpha) {
+      if (a === 255) continue;
+      seeThrough++;
+      if (a < cutoff) clear++;
+      if (a > 0) soft++;
+    }
+    if (!clear) return 'none';
+    return soft > seeThrough * SOFT_SHARE ? 'blend' : 'cutout';
+  } catch {
+    return 'none';      // a tainted or undecodable image: leave the material as it was
+  }
+}
+
+/** Every pixel's alpha, 0–255, or null when the image cannot be read. */
+function alphaValues(image) {
+  // DataTexture images (TGA among them) are already RGBA bytes.
+  if (image.data && image.width && image.height) {
+    const { data, width, height } = image;
+    if (!(data instanceof Uint8Array || data instanceof Uint8ClampedArray)) return null;
+    if (data.length !== width * height * 4) return null;
+    const alpha = new Uint8Array(width * height);
+    for (let i = 0; i < alpha.length; i++) alpha[i] = data[i * 4 + 3];
+    return alpha;
+  }
+  const width = image.naturalWidth || image.videoWidth || image.width;
+  const height = image.naturalHeight || image.videoHeight || image.height;
+  if (!width || !height || typeof document === 'undefined') return null;
+  const scale = Math.min(1, ALPHA_SAMPLE / Math.max(width, height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(width * scale));
+  canvas.height = Math.max(1, Math.round(height * scale));
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  context.imageSmoothingEnabled = false;   // sample, don't blur hard edges into soft ones
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  const data = context.getImageData(0, 0, canvas.width, canvas.height).data;
+  const alpha = new Uint8Array(canvas.width * canvas.height);
+  for (let i = 0; i < alpha.length; i++) alpha[i] = data[i * 4 + 3];
+  return alpha;
 }
 
 /**

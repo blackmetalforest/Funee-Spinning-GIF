@@ -14,7 +14,9 @@ import vm from 'vm';
 
 import { frameDelaysMs, loopSummary, frameAngles, roundHalfToEven,
          frameStarts, frameIndexAt, SPIN_RATIOS, loopTurns,
-         framePoses } from '../src/encoders/timing.js';
+         framePoses, frameTimesMs } from '../src/encoders/timing.js';
+import { playableDelays, PICTURE_MODEL_EXTENSIONS } from '../src/image-model.js';
+import { MODEL_EXTENSIONS } from '../src/archive.js';
 import { muxAnimation } from '../src/encoders/webp.js';
 import { muxApng } from '../src/encoders/apng.js';
 import { encodePng } from '../src/encoders/png.js';
@@ -72,6 +74,24 @@ check('starts at 0', angles[0] === 0);
 check('no repeated pose at the wrap', Math.abs(angles[23]) !== 360);
 check('even 15 deg steps', Math.abs(Math.abs(angles[1] - angles[0]) - 15) < 1e-9);
 check('counter-clockwise flips sign', frameAngles(4, false)[1] > 0);
+
+console.log('\npictures as models');
+{
+  const same = (a, b) => a.length === b.length && a.every((x, i) => Math.abs(x - b[i]) < 1e-9);
+  check('frame times divide the loop evenly', same(frameTimesMs(4, 0.5), [0, 500, 1000, 1500]));
+  check('a stopped loop holds time at zero', same(frameTimesMs(3, 0), [0, 0, 0]));
+  check('one time per frame', frameTimesMs(100, 0.3).length === 100);
+  check('the 60 fps GIF pattern is kept as written',
+    same(playableDelays([20, 20, 10]), [20, 20, 10]));
+  check('a missing or zero delay becomes 100 ms',
+    same(playableDelays([40, 0, 40]), [40, 100, 40]));
+  check('all-tiny delays follow the browser rule',
+    same(playableDelays([10, 0, 10]), [100, 100, 100]));
+  check('all five picture formats open', ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif']
+    .every((ext) => PICTURE_MODEL_EXTENSIONS.includes(ext)));
+  check('inside a zip a picture is still a texture, not a model',
+    PICTURE_MODEL_EXTENSIONS.every((ext) => !MODEL_EXTENSIONS.has(ext)));
+}
 
 console.log('\nextra spin axes');
 {

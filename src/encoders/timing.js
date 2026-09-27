@@ -179,3 +179,16 @@ export function framePoses(nFrames, { clockwise = true, turns = 1, axes = [] } =
     return pose;
   });
 }
+
+/**
+ * When each output frame is shown, in ms from the start of the loop — the
+ * clock an animated texture is read against (SpinScene.setTime). Ideal times
+ * rather than any format's quantised ones, so the preview and every export
+ * pick the same picture for the same frame.
+ */
+export function frameTimesMs(nFrames, rps) {
+  const n = Math.max(1, Math.floor(nFrames));
+  if (!(rps > 0)) return new Array(n).fill(0);
+  const loopMs = 1000 / rps;
+  return Array.from({ length: n }, (_, i) => (loopMs * i) / n);
+}

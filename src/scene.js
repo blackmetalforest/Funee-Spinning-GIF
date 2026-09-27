@@ -483,6 +483,7 @@ export class SpinScene {
 
     this.prepareMeshes();
     this.applySettings(this.settings);
+    this.collectAnimations();
 
     // Fixed for the lifetime of this model: sized after applySettings so the
     // camera (and therefore the frame clamp) is up to date, but measured from
@@ -905,6 +906,59 @@ export class SpinScene {
   }
 
   /**
+   * The model's animated textures — an animated GIF or WebP loaded as a
+   * picture (src/image-model.js) — found once per model. The texture objects
+   * are shared by every material made from the file's, so swapping a
+   * texture's picture reaches Retro, Realistic and the debug views alike.
+   */
+  collectAnimations() {
+    const found = new Set();
+    this.model?.traverse((child) => {
+      if (!child.isMesh) return;
+      for (const material of [...(child.userData.sources ?? []), ...materialsOf(child)]) {
+        const texture = material?.map;
+        if (texture?.userData?.animation) found.add(texture);
+      }
+    });
+    this.animations = [...found];
+  }
+
+  /** Length of the model's texture animation in ms, 0 when nothing animates. */
+  get animationMs() {
+    let longest = 0;
+    for (const texture of this.animations ?? []) {
+      longest = Math.max(longest, texture.userData.animation.totalMs);
+    }
+    return longest;
+  }
+
+  /**
+   * Show the texture animation as it is `ms` into its run, wrapping round at
+   * its end. Returns whether any picture changed, so a caller that only
+   * redraws on change knows to.
+   */
+  setTime(ms) {
+    let changed = false;
+    for (const texture of this.animations ?? []) {
+      const anim = texture.userData.animation;
+      const t = ((ms % anim.totalMs) + anim.totalMs) % anim.totalMs;
+      // Last frame starting at or before t.
+      let lo = 0;
+      let hi = anim.starts.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1;
+        if (anim.starts[mid] <= t) lo = mid; else hi = mid - 1;
+      }
+      if (lo === anim.index) continue;
+      anim.index = lo;
+      texture.image = anim.frames[lo];
+      texture.needsUpdate = true;
+      changed = true;
+    }
+    return changed;
+  }
+
+  /**
    * Point the model at a given spin angle, in degrees, and optionally a tumble
    * (about world X, left–right) and a roll (about world Z, toward the
    * viewer) on top of it — the Spin section's extra axes.
@@ -976,6 +1030,7 @@ export class SpinScene {
     this.converted = new Map();
     this.debugCache = new Map();
     this.renderMaterials = new Set();
+    this.animations = [];
   }
 
   dispose() {

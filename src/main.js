@@ -17,7 +17,7 @@ import { placeBackdrop } from './backdrop.js';
 import { PRESETS, PRESET_KEYS, presetValues, matchingPreset } from './presets.js';
 import { captureFrames, decodeFrames, storeSize } from './capture.js';
 import { loopSummary, FPS_LIMIT, frameDelaysMs, frameStarts, frameIndexAt,
-         SPIN_RATIOS, loopTurns, framePoses } from './encoders/timing.js';
+         SPIN_RATIOS, loopTurns, framePoses, frameTimesMs } from './encoders/timing.js';
 import { encodeGif } from './encoders/gif.js';
 import { muxAnimation, encodeStill } from './encoders/webp.js';
 import { muxApng } from './encoders/apng.js';
@@ -181,6 +181,15 @@ function readExtraAxes() {
  */
 function readSpin() {
   const turnRps = +$('speed').value;
+  const clockwise = $('direction').value === 'cw';
+  // Nothing spinning, but an animated picture: the loop is the animation, and
+  // `turns` 0 holds every pose still while its frames play.
+  const animationMs = scene.animationMs;
+  if (!(turnRps > 0) && animationMs > 0) {
+    const rps = 1000 / animationMs;
+    const { frames, ideal } = framesFor(+$('fps').value, rps);
+    return { frames, ideal, stopped: false, still: true, turns: 0, axes: [], rps, clockwise };
+  }
   const axes = readExtraAxes();
   const turns = loopTurns(axes);
   const { frames, ideal, stopped } = framesFor(+$('fps').value, turnRps / turns);
@@ -490,6 +499,7 @@ function syncFrameCount() {
   out.classList.toggle('caution', frames < FRAMES_MAX && frames >= FRAMES_HEAVY);
   $('frames-note').textContent = ideal > FRAMES_MAX
     ? `capped from ${ideal.toLocaleString()}`
+    : turns === 0 ? 'frame rate × animation length'
     : turns > 1 ? `frame rate ÷ spin speed × ${turns} spins` : 'frame rate ÷ spin speed';
 }
 
@@ -511,6 +521,11 @@ function updateLoopInfo() {
   const plural = spin.frames === 1 ? 'frame' : 'frames';
   // A loop of several spins is quoted as a loop, with the spin rate still
   // per turn, since that is what the Spin speed slider sets.
+  if (spin.still) {
+    $('loop-info').innerHTML =
+      `${spin.frames} ${plural} · ${seconds} s animation · ${fpsHtml} · not spinning`;
+    return;
+  }
   const length = spin.turns > 1 ? `${seconds} s/loop of ${spin.turns} spins` : `${seconds} s/turn`;
   $('loop-info').innerHTML =
     `${spin.frames} ${plural} · ${length} · ${fpsHtml} · ` +
@@ -617,11 +632,12 @@ function startPump() {
 let playing = false;
 let playEpoch = 0;
 let shownIndex = -1;
-const cycle = { angles: [], starts: [], totalMs: 0 };
+const cycle = { angles: [], times: [], starts: [], totalMs: 0 };
 
 function rebuildCycle() {
   const spin = readSpin();
   cycle.angles = framePoses(spin.frames, spin);
+  cycle.times = frameTimesMs(spin.frames, spin.rps);
   // GIF's grid, the same one #loop-info quotes: the coarsest of the formats,
   // and the only one whose quantisation is visible as judder.
   const { starts, totalMs } = frameStarts(frameDelaysMs(spin.frames, spin.rps, 'gif'));
@@ -654,6 +670,7 @@ function advancePlayback(now) {
   if (index === shownIndex) return false;
   shownIndex = index;
   scene.setAngle(...cycle.angles[index]);
+  scene.setTime(cycle.times[index]);
   return true;
 }
 
@@ -674,7 +691,7 @@ function stopPlayback({ rewind = true } = {}) {
   $('preview-fps').textContent = '';
   // Frame 0 is what every other still preview shows, and what the next
   // settings change would snap to anyway.
-  if (rewind && scene.model) { scene.setAngle(0); scene.render(); }
+  if (rewind && scene.model) { scene.setAngle(0); scene.setTime(0); scene.render(); }
 }
 
 /*
@@ -763,8 +780,10 @@ function schedulePreview() {
     if (playing) {
       shownIndex = playbackIndexAt(performance.now());
       scene.setAngle(...cycle.angles[shownIndex]);
+      scene.setTime(cycle.times[shownIndex]);
     } else {
       scene.setAngle(0);
+      scene.setTime(0);
     }
     scene.render();
     recordTextureFit();
@@ -869,11 +888,14 @@ async function handleFile(file, choice = null) {
   currentChoice = choice;
   setBusy(`Loading ${file.name}…`);
   try {
-    const { object, stats, report } = await loadModel(
-      file, { creaseAngle: DEFAULT_SETTINGS.smoothAngle, choice });
+    const { object, stats, report } = await loadModel(file, {
+      creaseAngle: DEFAULT_SETTINGS.smoothAngle, choice,
+      // Only an animated picture reports progress: one step per frame decoded.
+      onProgress: (done, total) => setBusy(`Loading ${file.name}… frame ${done} of ${total}`),
+    });
     scene.setModel(object);
     scene.setHiddenMeshes(hiddenMeshes);
-    pickLighting(!choice);
+    pickLighting(!choice, !!stats.image);
     scene.applySettings(readSettings());
     syncLightingChrome();
     syncRenderingChrome();
@@ -882,11 +904,11 @@ async function handleFile(file, choice = null) {
     modelName = stemOf(report ? report.picked : file.name);
     $('file-name').value = file.name;
 
-    const bits = [
+    const bits = stats.image ? pictureBits(stats.image) : [
       `${stats.triangles.toLocaleString()} triangles`,
       `${stats.meshes} mesh${stats.meshes === 1 ? '' : 'es'}`,
     ];
-    if (stats.textured) bits.push('textured');
+    if (stats.textured && !stats.image) bits.push('textured');
     if (stats.vertexColours) bits.push('vertex colours');
     // Formats that keep textures in external files usually arrive bare. Inside
     // a zip those files are usually right there, so the advice only applies to
@@ -903,6 +925,11 @@ async function handleFile(file, choice = null) {
     canvas.classList.remove('empty');
     $('render').disabled = contextLost;
     discardStore();
+    // An animated picture changes what a stopped spin means (see readSpin),
+    // so the frame count and loop line are worked out again for it.
+    syncFrameCount();
+    updateLoopInfo();
+    if (playing) resyncCycle();
     schedulePreview();
     if ($('preview').checked) startPlayback();   // requested before a model existed
   } catch (err) {
@@ -915,6 +942,20 @@ async function handleFile(file, choice = null) {
   } finally {
     setBusy('');
   }
+}
+
+/** The stats line for a picture loaded as a model. */
+function pictureBits(image) {
+  const bits = [`picture · ${image.width} × ${image.height}`];
+  if (image.frames > 1) {
+    bits.push(`${image.frames} frames · ${(image.durationMs / 1000).toFixed(2)} s`);
+    if (image.frameWidth < image.width) {
+      bits.push(`frames kept at ${image.frameWidth} × ${image.frameHeight} to fit in memory`);
+    }
+  } else if (image.animationLost) {
+    bits.push('animated, but this browser can only show its first frame');
+  }
+  return bits;
 }
 
 /* ------------------------------------------------------------- advanced */
@@ -1731,6 +1772,8 @@ function resetRendering() {
   $('texture-filter').value = d.textureFilter;
   $('double-sided').checked = d.doubleSided;
   for (const key of Object.keys(layerState)) layerState[key] = true;
+  // A picture's defaults are the ones it loaded with.
+  if (pictureLoaded) pictureDefaults();
   renderLayerList();
   applyCapabilityLimits();
 }
@@ -1808,13 +1851,15 @@ let chromeKey = '';
 function syncRenderingChrome() {
   if (!scene.model) return;
   const { counts, total, shading } = scene.layerCounts();
-  const key = JSON.stringify([shading, counts, total, suggestedLighting]);
+  const key = JSON.stringify([shading, counts, total, suggestedLighting, pictureLoaded]);
   if (key === chromeKey) return;
   chromeKey = key;
   const what = shading === 'physical'
     ? `Realistic, ${total} material${total === 1 ? '' : 's'} lit by the environment too`
     : 'Retro, colour and colour map only, lit as it always has been';
-  $('shading-note').textContent = shading === suggestedLighting
+  $('shading-note').textContent = pictureLoaded && shading === 'classic'
+    ? 'Picked for a picture: Retro, and the Flat preset shows it at its own colours.'
+    : shading === suggestedLighting
     ? `Picked for this model: ${what}.`
     : `Using ${what}. This model would pick ${LIGHTING_NAMES[suggestedLighting]}.`;
   renderLayerList();
@@ -1936,9 +1981,28 @@ $('shading').addEventListener('input', () => {
  * physically based, Retro otherwise, including whenever the file does not
  * say. Re-picking the texture or material file of the same model keeps a
  * choice made by hand, unless the answer itself changed.
+ *
+ * A picture gets Retro's Flat preset, which shows it at exactly its own
+ * colours, and Sharp texture filtering, which keeps it crisp when it turns
+ * edge-on. Neither is undone for the model loaded after it.
  */
 let suggestedLighting = null;
-function pickLighting(newFile) {
+let pictureLoaded = false;          // the model is a picture (image-model.js)
+const FLAT = PRESETS.classic.find((preset) => preset.id === 'flat');
+
+function pictureDefaults() {
+  applyPreset(FLAT);
+  $('texture-filter').value = 'sharp';
+}
+function pickLighting(newFile, picture = false) {
+  if (picture) {
+    if (!newFile) return;
+    $('shading').value = lightingMode = suggestedLighting = 'classic';
+    pictureDefaults();
+    pictureLoaded = true;
+    return;
+  }
+  pictureLoaded = false;
   const suggested = scene.resolveShading('auto');
   const changed = suggested !== suggestedLighting;
   suggestedLighting = suggested;
@@ -2134,7 +2198,7 @@ document.querySelectorAll('.save').forEach((button) => {
 async function saveAs(format) {
   if (!store) return;
   const spin = readSpin();
-  const loopWord = spin.turns > 1 ? `loop of ${spin.turns} spins` : 'turn';
+  const loopWord = spin.still ? 'loop' : spin.turns > 1 ? `loop of ${spin.turns} spins` : 'turn';
   const settings = readSettings();
   setBusy(`Building ${FORMAT_LABELS[format]}…`);
   setSaveEnabled(false);

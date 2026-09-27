@@ -16,7 +16,7 @@
  * against ~8 ms for the fflate path. See src/encoders/png.js.
  */
 
-import { framePoses } from './encoders/timing.js';
+import { framePoses, frameTimesMs } from './encoders/timing.js';
 import { encodePng } from './encoders/png.js';
 import { drawText, drawBand, layoutBand } from './overlay-text.js';
 import { drawBackdrop } from './backdrop.js';
@@ -103,6 +103,8 @@ export async function captureFrames(scene, spin, onProgress, caption = null,
   const { width, height } = scene.settings;
   // [spin, tumble, roll] per frame; see framePoses().
   const poses = framePoses(spin.frames, spin);
+  // Where an animated picture is in its own run at each frame.
+  const times = frameTimesMs(spin.frames, spin.rps);
   // The renderer no longer paints the background, so the composer does.
   const { resolve, height: outHeight } = makeResolver(width, height, caption, backdrop);
   const blobs = [];
@@ -115,6 +117,7 @@ export async function captureFrames(scene, spin, onProgress, caption = null,
   try {
     for (let i = 0; i < poses.length; i++) {
       scene.setAngle(...poses[i]);
+      scene.setTime(times[i]);
       scene.render();
 
       // PNG keeps the frame store lossless; see the note at the top of the file.
@@ -128,6 +131,7 @@ export async function captureFrames(scene, spin, onProgress, caption = null,
     return { blobs, width, height: outHeight };
   } finally {
     if (axisWasVisible) scene.setAxisVisible(true);
+    scene.setTime(0);
   }
 }
 

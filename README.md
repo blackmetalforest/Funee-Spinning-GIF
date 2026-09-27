@@ -37,6 +37,8 @@ Tip: change the Address → We Love Katamari
 ### What it does
 
 - Loads 11 model formats, including textured GLB and FBX
+- Spins **pictures** too — PNG, JPEG, WebP, BMP and GIF, with their
+  transparency, and **animated GIFs and WebPs play** as the card turns
 - Opens **.zip bundles** — finds the model inside, textures and all, even
   when it is buried in a second archive
 - Renders on the GPU with three.js — with the model's own **physically based
@@ -129,9 +131,57 @@ file and always works. A lone `.obj`, `.gltf`, `.dae` or `.3ds` keeps them in
 separate files a browser file picker cannot follow, so it loads untextured —
 **drop the zip instead** and they come with it.
 
+**Pictures:** `.png` `.jpg` `.jpeg` `.webp` `.bmp` `.gif` — see
+[Pictures](#pictures).
+
 Not supported: `.off` (no three.js loader), VRML (needs a large extra parser),
 KTX2/Basis textures, and `.rar` or `.7z` archives — the app says so when it
 finds one rather than failing silently.
+
+## Pictures
+
+Drop a picture where a model would go and it becomes a flat card, sized to the
+picture and showing it on both sides — mirrored on the back, as a card would
+be. It loads with Retro lighting and the **Flat** preset, which shows it at
+exactly its own colours, and with **Texture filtering → Sharp (anisotropic)**:
+a picture turned nearly edge-on otherwise goes soft, because the GPU samples a
+smaller copy of the texture there to avoid shimmer. Every other setting still
+works on it, and **Reset to defaults** goes back to these two. Neither is
+undone when a 3D model is loaded next.
+
+**Transparency.** A PNG, WebP or GIF's alpha is read the same way a game rip's
+textures are (see [Transparent textures drawn black](#what-gets-repaired-on-the-way-in)):
+hard-edged transparency becomes a cut-out, soft transparency is blended, and
+the **Transparency** layer switch turns it off.
+
+**Animation.** An animated GIF or WebP (or APNG) is decoded to all of its
+frames when it loads, and each output frame shows the picture the animation
+would be showing at that moment — in the preview and in every export alike.
+The animation runs at its own speed, whatever the spin speed is:
+
+- **Spin speed 0** makes the loop the animation itself: the frame count is the
+  frame rate × the animation's length, so it loops exactly, and the card holds
+  still facing you.
+- **While spinning**, the loop is the spin's, and the animation is sampled
+  against it. If the animation's length does not divide the loop's, it jumps
+  back to its start where the GIF loops.
+
+Frame delays are read as written, so the common "60 fps" GIF whose delays run
+20, 20, 10 ms plays at 60 fps. Only a missing or zero delay is read as 100 ms,
+as browsers do, and so are delays that are all 10 ms or less.
+
+**Memory.** Decoded frames are held as pixels, so a long animation is large: a
+1000-frame 500 × 500 GIF is a gigabyte. Frames are shrunk until the whole
+animation fits a budget of about 384 MB (up to 512 MB on a machine that
+reports lots of memory), and the stats line says when that happened — the
+1000-frame test files are kept at 366 × 366, which is about the size the card
+is drawn at in a 480-pixel output anyway. Stills are kept up to 4096 pixels
+on a side.
+
+Playing an animation needs the browser's ImageDecoder, which Chrome and Edge
+have. In a browser without it the picture still loads, as its first frame, and
+the stats line says the animation was lost. Inside a zip a picture is always a
+texture, never the model.
 
 ## Zipped models
 
@@ -379,6 +429,24 @@ and only where there is a texture for them to crush.
 
 **Colour space.** A colour map holds sRGB data by definition, but ColladaLoader
 sets no colour space at all, which renders washed out.
+
+**Transparent textures drawn black.** OBJ, Collada and FBX have no reliable way
+to say that a texture has holes in it: PaRappa's .mtl says `d 1` for his
+cut-out hat as readily as for a solid crate. Taken at its word the material is
+opaque, so every see-through pixel shows its colour instead, which is almost
+always black. Eyes, brows, mustaches, hair cards and wheels came out as black
+boxes. Where the file says nothing about transparency, the colour map's own
+alpha is now read:
+
+- mostly on/off alpha is drawn as a **cut-out** (alpha test at half), which is
+  how the consoles these rips come from drew it and needs no sorting;
+- mostly in-between alpha (bubbles, glow, glass) is **blended**;
+- alpha that never drops below half is left alone, since it is more likely a
+  specular mask than transparency.
+
+glTF is never guessed, because it states its alpha mode outright. The
+**Transparency** layer switch turns the result back off for a model it does not
+suit.
 
 **Collada texture coordinates.** 3ds Max's ColladaMax exporter writes its map
 channel as coordinate set 1. ColladaLoader files set 1 under `uv1`, but every
@@ -1102,6 +1170,7 @@ src/style.css         layout, including the mobile breakpoint
 src/main.js           wiring: controls -> scene -> frame store -> exports
 src/scene.js          three.js scene, framing, lights, shadows
 src/loaders.js        format dispatch
+src/image-model.js    pictures as a flat card, and animated frames
 src/archive.js        the zip hunter: flatten, pick a model, find its textures
 src/materials.js      Retro and Realistic materials, layer switches, debug views
 src/presets.js        the eight lighting presets for each path
@@ -1111,7 +1180,7 @@ src/dae-fix.js        the two Collada repairs
 src/capture.js        the frame store
 src/backdrop.js       where a background picture goes, for preview and export
 src/encoders/
-  timing.js           delay grid + loop angles
+  timing.js           delay grid + loop angles and frame times
   png.js              fast PNG encoder + shared chunk helpers
   gif.js              gifenc with one global palette
   webp.js             animated WebP muxer
