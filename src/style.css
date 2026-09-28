@@ -419,6 +419,10 @@ html, body {
 .row:last-child { margin-bottom: 0; }
 .row label { color: var(--muted); font-size: 13px; }
 .row.actions { grid-template-columns: 1fr auto; }
+/* Canvas: two small number boxes with a × between them, then Square. */
+.canvas-size { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.canvas-size input[type="number"] { width: 72px; }
+.canvas-square { display: flex; align-items: center; gap: 6px; white-space: nowrap; cursor: pointer; }
 #frames-note { font-style: italic; }
 /* The Image section shows only the rows for the chosen kind of background. */
 #image:not([data-background="solid"]) .bg-solid-only,
@@ -750,6 +754,10 @@ details.more[open] > summary { margin-bottom: 8px; }
   .row output { min-width: 56px; }
   /* Match the reading it replaces, so editing barely narrows the slider. */
   .row input.number-edit { width: 64px; }
+  /* Canvas fits a phone's width on one line: its short label gives up the
+     label column's spare room, and the boxes hold four digits and no more. */
+  .canvas-row { grid-template-columns: auto 1fr auto; }
+  .canvas-size input[type="number"] { width: 56px; padding: 6px 5px; }
 
   /*
    * Stack the Advanced rows. These dropdowns hold filenames — "Adeleine
