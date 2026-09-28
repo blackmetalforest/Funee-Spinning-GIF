@@ -33,8 +33,10 @@
         are set in JS so the band and the render always scale as one piece.
 
         Bottom to top: the background colour, the background picture, the
-        caption, the render — except in Behind mode, where a class swaps the
-        last two. The caption is a 2D
+        render, the foreground picture, the caption — except in Behind mode,
+        where a class lifts the render and the foreground over the caption.
+        The foreground and the caption are 2D canvases because you cannot
+        draw into a WebGL context, and the caption is a 2D
         canvas because you cannot draw text into a WebGL context, and it is
         "preview" only in the sense that this element is: captureFrames()
         bakes the very same drawing into every exported frame.
@@ -44,6 +46,7 @@
         <div id="backdrop-art" hidden><img id="backdrop-image" alt=""><canvas
           id="backdrop-frames" hidden></canvas></div>
         <canvas id="canvas"></canvas>
+        <canvas id="fg-layer" hidden></canvas>
         <canvas id="overlay"></canvas>
       </div>
       <div id="dropzone">
@@ -257,6 +260,41 @@
       <div class="row"><label for="square">Square</label>
         <input type="checkbox" id="square" checked></div>
       <!--
+        The foreground layer: a picture over the render and under any text,
+        with the background picture's controls — placed by the same rule,
+        animated and synced the same way. See readForeground().
+      -->
+      <div class="row"><label for="fg-mode">Foreground</label>
+        <select id="fg-mode">
+          <option value="off" selected>Disabled</option>
+          <option value="image">Image</option>
+        </select></div>
+      <div id="fg-rows" hidden>
+        <div class="row"><label for="fg-browse">Image</label>
+          <span id="fg-name" class="muted small">None chosen</span>
+          <button id="fg-browse" type="button">Browse…</button></div>
+        <div class="row"><label for="fg-size">Size</label>
+          <input type="range" id="fg-size" min="0" max="200" step="1" value="100"
+                 title="100% fits the picture to the image's height.">
+          <output for="fg-size" id="fg-size-out">100%</output></div>
+        <div class="row"><label for="fg-y">Up / down</label>
+          <input type="range" id="fg-y" min="-100" max="100" step="1" value="0">
+          <output for="fg-y" id="fg-y-out">0</output></div>
+        <div class="row"><label for="fg-x">Left / right</label>
+          <input type="range" id="fg-x" min="-100" max="100" step="1" value="0">
+          <output for="fg-x" id="fg-x-out">0</output></div>
+        <!-- Only for an animated foreground picture; see readSpin(). -->
+        <div class="row" id="row-fg-sync" hidden><label for="fg-sync">Sync</label>
+          <input type="checkbox" id="fg-sync" checked
+                 title="Speed the foreground's animation up or down so a whole number of plays fits one loop exactly, so the exported loop has no jump."></div>
+        <p id="fg-sync-note" class="muted small" hidden></p>
+        <p class="muted small">Drawn over the model and under any text, with its
+          transparency. Placed like the background picture: 100% fits the
+          image's height.</p>
+        <input id="fg-file" type="file" hidden
+               accept=".jpg,.jpeg,.png,.webp,.bmp,.gif,image/jpeg,image/png,image/webp,image/bmp,image/gif">
+      </div>
+      <!--
         The background layer, under the render and anything drawn Behind it.
         Only the rows for the chosen kind are shown; the section's
         data-background attribute, set from main.js, does the hiding.
@@ -463,38 +501,8 @@
           <option value="front">In Front</option>
           <option value="ontop">On Top</option>
           <option value="behind">Behind</option>
-          <option value="image">Foreground Image</option>
         </select></div>
 
-      <!--
-        Foreground Image: a picture over the model in place of text, with the
-        background picture's controls — placed by the same rule, animated and
-        synced the same way. See readForeground().
-      -->
-      <div id="text-image" hidden>
-        <div class="row"><label for="fg-browse">Image</label>
-          <span id="fg-name" class="muted small">None chosen</span>
-          <button id="fg-browse" type="button">Browse…</button></div>
-        <div class="row"><label for="fg-size">Size</label>
-          <input type="range" id="fg-size" min="0" max="200" step="1" value="100"
-                 title="100% fits the picture to the image's height.">
-          <output for="fg-size" id="fg-size-out">100%</output></div>
-        <div class="row"><label for="fg-y">Up / down</label>
-          <input type="range" id="fg-y" min="-100" max="100" step="1" value="0">
-          <output for="fg-y" id="fg-y-out">0</output></div>
-        <div class="row"><label for="fg-x">Left / right</label>
-          <input type="range" id="fg-x" min="-100" max="100" step="1" value="0">
-          <output for="fg-x" id="fg-x-out">0</output></div>
-        <!-- Only for an animated foreground picture; see readSpin(). -->
-        <div class="row" id="row-fg-sync" hidden><label for="fg-sync">Sync</label>
-          <input type="checkbox" id="fg-sync" checked
-                 title="Speed the foreground's animation up or down so a whole number of plays fits one loop exactly, so the exported loop has no jump."></div>
-        <p id="fg-sync-note" class="muted small" hidden></p>
-        <p class="muted small">Drawn over the model, with its transparency.
-          Placed like the background picture: 100% fits the image's height.</p>
-        <input id="fg-file" type="file" hidden
-               accept=".jpg,.jpeg,.png,.webp,.bmp,.gif,image/jpeg,image/png,image/webp,image/bmp,image/gif">
-      </div>
 
       <!-- In Front and Behind: identical controls, only the stacking differs. -->
       <div id="text-blocks" hidden>

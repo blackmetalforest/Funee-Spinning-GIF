@@ -26,8 +26,9 @@ import { drawBackdrop } from './backdrop.js';
  *
  * This is the only place that decides how a frame is stacked, which is what
  * keeps the four caption modes from each inventing their own arrangement.
- * Bottom to top it is always: background, then two of {render, caption} in
- * whichever order the mode asks for.
+ * Bottom to top it is always: background, then the render with the
+ * foreground picture over it, and the caption over or under those two as the
+ * mode asks.
  *
  * The background is painted here rather than by the renderer. The GL clear is
  * always transparent now (see SpinScene.render), so an opaque background is a
@@ -75,17 +76,21 @@ function makeResolver(width, height, caption, backdrop, foreground = null) {
     // its edges stay sharp instead of being softened along with the render.
     // Here rather than at save time because it belongs to the frame: one
     // render then feeds a GIF, a WebP and an APNG that all agree.
+    // Bottom to top: background, render, foreground picture, caption — or,
+    // in Behind, the caption under the render and the foreground with it.
+    // The foreground belongs to the render, like the background: it sits over
+    // the render's rows and never over On Top's band.
+    const place = { width, height, top: band, total };
     if (mode === 'behind') {
       drawText(ctx, caption.text, { ...caption, width, height });
       ctx.drawImage(source, 0, 0, width, height);
+      if (foreground) drawBackdrop(ctx, pictureAt(foreground, foregroundMs), place);
     } else {
       ctx.drawImage(source, 0, band, width, height);
+      if (foreground) drawBackdrop(ctx, pictureAt(foreground, foregroundMs), place);
       if (mode === 'ontop') drawBand(ctx, caption.band, { ...caption, width, height, y: 0 });
       else if (mode === 'front') drawText(ctx, caption.text, { ...caption, width, height });
     }
-    // Foreground Image: Text's picture mode, placed and drawn exactly as the
-    // background is, but over the render. It never has a band to allow for.
-    if (foreground) drawBackdrop(ctx, pictureAt(foreground, foregroundMs), { width, height, top: band, total });
     return ctx.getImageData(0, 0, width, total);
   };
   // The composed height travels with the composer: it is the store's height,
@@ -105,9 +110,9 @@ function makeResolver(width, height, caption, backdrop, foreground = null) {
  *          x:number, y:number, animation?:{frames, starts, totalMs}}} [backdrop]
  *   the background layer; see drawBackdrop(). Null leaves the frame clear.
  *   With `animation`, each frame draws the picture showing at that moment.
- * @param {null | {image, size, x, y, animation?}} [foreground] Text's
- *   Foreground Image: the same shape as a picture backdrop, drawn over the
- *   render instead of under it.
+ * @param {null | {image, size, x, y, animation?}} [foreground] the Image
+ *   section's Foreground: the same shape as a picture backdrop, drawn over
+ *   the render and under any caption.
  * @returns {Promise<{blobs: Blob[], width: number, height: number} | null>}
  *   `height` is the height of the finished image, which "On Top" makes taller
  *   than the render. Every exporter reads it from here rather than from the

@@ -170,7 +170,7 @@ html, body {
 /* Nothing is left of the image, so the empty stage shows the dropzone alone. */
 #stage:has(#canvas.empty) #frame { display: none; }
 
-#backdrop, #canvas, #overlay {
+#backdrop, #canvas, #fg-layer, #overlay {
   width: 100%;
   height: 100%;
   min-width: 0;
@@ -184,7 +184,7 @@ html, body {
  * paints above every non-positioned one whatever the source order says — so
  * without this the background picture covered the render and the caption.
  */
-#canvas, #overlay { position: relative; }
+#canvas, #fg-layer, #overlay { position: relative; }
 
 /*
  * The background colour, as a layer of its own. The renderer used to paint it
@@ -243,8 +243,20 @@ html, body {
 }
 #overlay[hidden] { display: none; }
 
-/* Behind mode: the render goes over the caption instead of under it. */
+/*
+ * The foreground picture belongs to the render, like the background: it takes
+ * the render's row and sits between the render and the caption.
+ */
+#fg-layer {
+  grid-row: 2;
+  grid-column: 1;
+  pointer-events: none;
+}
+#fg-layer[hidden] { display: none; }
+
+/* Behind mode: the render, and the foreground with it, go over the caption. */
 #frame.behind #canvas { z-index: 1; }
+#frame.behind #fg-layer { z-index: 2; }
 
 /*
  * Marks the exact edge of the exported image.
@@ -677,7 +689,7 @@ details.more[open] > summary { margin-bottom: 8px; }
 }
 #text-band textarea { min-height: calc(3em + 12px); }
 #text-blocks[hidden], #text-band[hidden], #text-style[hidden],
-#text-stroke-row[hidden], #text-image[hidden], #row-fg-sync[hidden],
+#text-stroke-row[hidden], #fg-rows[hidden], #row-fg-sync[hidden],
 #fg-sync-note[hidden] { display: none; }
 #fg-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #tumble-ratio-row[hidden], #roll-ratio-row[hidden] { display: none; }

@@ -275,8 +275,7 @@ function clampInt(value, lo, hi, fallback) {
  */
 function readCaption() {
   const mode = $('text-mode').value;
-  // Foreground Image puts a picture where the text would go; see readForeground().
-  if (mode === 'off' || mode === 'image') return null;
+  if (mode === 'off') return null;
 
   const style = {
     mode,
@@ -310,14 +309,15 @@ function readCaption() {
 let backdropPicture = null;
 
 /**
- * The picture chosen for Text → Foreground Image: the same shape as
- * backdropPicture, drawn over the render instead of under it.
+ * The picture chosen for the Image section's Foreground: the same shape as
+ * backdropPicture, drawn over the render — and under any text — instead of
+ * under it.
  */
 let foregroundPicture = null;
 
 /** Length of the foreground picture's animation in ms, 0 when it has none or is not shown. */
 function foregroundAnimationMs() {
-  return $('text-mode').value === 'image' ? foregroundPicture?.animation?.totalMs ?? 0 : 0;
+  return $('fg-mode').value === 'image' ? foregroundPicture?.animation?.totalMs ?? 0 : 0;
 }
 
 /**
@@ -326,7 +326,7 @@ function foregroundAnimationMs() {
  * placeBackdrop() and drawn by the same drawBackdrop().
  */
 function readForeground() {
-  if ($('text-mode').value !== 'image' || !foregroundPicture) return null;
+  if ($('fg-mode').value !== 'image' || !foregroundPicture) return null;
   return {
     image: foregroundPicture.bitmap,
     animation: foregroundPicture.animation,
@@ -406,26 +406,26 @@ function showBackdropFrame(ms) {
 }
 
 /*
- * The foreground picture is painted into the caption's overlay canvas, which
- * sits over the render just as the export stacks it. An animated one is
- * repainted on the spin's clock, like the background, and only when its
- * frame actually changes.
+ * The foreground picture has a canvas of its own, over the render and under
+ * the caption, just as the export stacks it. An animated one is repainted on
+ * the spin's clock, like the background, and only when its frame changes.
  */
 let foregroundPreviewMs = 0;
 let foregroundShown = -1;
 function paintForeground(ms = foregroundPreviewMs) {
   foregroundPreviewMs = ms;
+  const layer = $('fg-layer');
   const foreground = readForeground();
-  const overlay = $('overlay');
-  if (!foreground || overlay.hidden) return;
+  layer.hidden = !foreground || canvas.classList.contains('empty');
+  if (layer.hidden) return;
   const { animation } = foreground;
   const index = animation ? frameIndexAt(animation.starts, animation.totalMs, ms) : 0;
   if (index === foregroundShown) return;
   foregroundShown = index;
-  const ctx = overlay.getContext('2d');
-  ctx.clearRect(0, 0, overlay.width, overlay.height);
+  const ctx = layer.getContext('2d');
+  ctx.clearRect(0, 0, layer.width, layer.height);
   const image = animation ? animation.frames[index] : foreground.image;
-  drawBackdrop(ctx, { ...foreground, image }, { width: overlay.width, height: overlay.height });
+  drawBackdrop(ctx, { ...foreground, image }, { width: layer.width, height: layer.height });
 }
 
 /**
@@ -546,11 +546,15 @@ function drawPreviewCaption() {
   // function, so this is the one place the readout cannot go stale.
   updateViewSize();
 
+  // The foreground takes the render's size; resizing clears it, so repaint.
+  const fgLayer = $('fg-layer');
+  if (fgLayer.width !== w || fgLayer.height !== h) { fgLayer.width = w; fgLayer.height = h; }
+  foregroundShown = -1;
+  paintForeground();
+
   const ctx = overlay.getContext('2d');
   ctx.clearRect(0, 0, overlay.width, overlay.height);
   overlay.hidden = hidden;
-  foregroundShown = -1;
-  paintForeground();
   if (!caption || hidden) return;
 
   if (caption.mode === 'ontop') {
@@ -1614,7 +1618,7 @@ const STYLE_BY_MODE = {
 let lastTextMode = $('text-mode').value;
 
 function rememberTextStyle() {
-  if (lastTextMode === 'off' || lastTextMode === 'image') return;
+  if (lastTextMode === 'off') return;
   STYLE_BY_MODE[lastTextMode] = { font: $('text-font').value, size: $('text-size').value };
 }
 $('text-font').addEventListener('change', rememberTextStyle);
@@ -1624,8 +1628,7 @@ $('text-mode').addEventListener('change', async () => {
   const mode = $('text-mode').value;
   $('text-blocks').hidden = mode !== 'front' && mode !== 'behind';
   $('text-band').hidden = mode !== 'ontop';
-  $('text-image').hidden = mode !== 'image';
-  $('text-style').hidden = mode === 'off' || mode === 'image';
+  $('text-style').hidden = mode === 'off';
   $('text-stroke-row').hidden = mode === 'ontop';
 
   const style = STYLE_BY_MODE[mode];
@@ -1637,8 +1640,7 @@ $('text-mode').addEventListener('change', async () => {
   lastTextMode = mode;
 
   discardStore();
-  // A foreground animation joins or leaves the loop with this switch.
-  applyAndPreview();
+  drawPreviewCaption();
   // The remembered font may not have been fetched yet, and until it is the
   // caption is measured from a fallback and sized wrong. Draw again once it
   // has arrived, exactly as picking a font by hand does.
@@ -1970,6 +1972,13 @@ async function chooseForegroundPicture(file) {
   discardStore();
   applyAndPreview();
 }
+
+// Switching the foreground on or off can change the loop (see readSpin).
+$('fg-mode').addEventListener('input', () => {
+  $('fg-rows').hidden = $('fg-mode').value !== 'image';
+  discardStore();
+  applyAndPreview();
+});
 
 $('fg-browse').addEventListener('click', () => $('fg-file').click());
 $('fg-file').addEventListener('change', (e) => {

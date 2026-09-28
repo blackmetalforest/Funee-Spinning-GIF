@@ -593,6 +593,26 @@ Note that **Yaw and Start rotation look identical while the model is centred** �
 both turn it about Y. They diverge once X/Z is non-zero: yaw turns the model in
 place, Start rotation carries it around the pivot.
 
+## Foreground
+
+The Image section's **Foreground**, above Background, puts a picture *over*
+the render. It is **Disabled** by default; set to **Image**, it has the
+background picture's controls and abilities: JPEG, PNG, WebP, BMP or GIF,
+transparency kept, **Size**, **Up / down** and **Left / right** placed by the
+same rule (100% fits the image's height), and an animated GIF or WebP plays in
+the preview and the export with its own **Sync** checkbox.
+
+The finished image is four layers. Bottom to top:
+
+1. the background (colour or picture)
+2. the render
+3. the foreground picture
+4. the text
+
+— except in the Text section's **Behind** mode, which puts the text under the
+render instead. Like the background picture, the foreground belongs to the
+render: it is clipped to it and never covers On Top's band.
+
 ## Background
 
 The Image section's **Background** is one of three:
@@ -850,7 +870,7 @@ that is one draw per second, and a 1-frame still draws once and then stops.
 
 ## Syncing several animations
 
-The model, the background and the Foreground Image can each be an animated
+The model, the background and the foreground can each be an animated
 picture, each with its own **Sync** checkbox. However many there are, the rule
 is the same two steps:
 
@@ -894,14 +914,9 @@ picture you asked for and nothing else.
 | **In Front** | top / centre / bottom boxes drawn over the render |
 | **On Top** | one caption in a white band grown *above* the image |
 | **Behind** | the same three boxes as In Front, composited *under* the render |
-| **Foreground Image** | a picture over the render instead of text |
 
-**Foreground Image** has the background picture's controls and abilities:
-JPEG, PNG, WebP, BMP or GIF, transparency kept, **Size**, **Up / down** and
-**Left / right** placed by the same rule (100% fits the image's height), and an
-animated GIF or WebP plays in the preview and the export with its own **Sync**
-checkbox. It is drawn over the model and everything else, and is never part
-of On Top's band.
+In Front's text is drawn over the [foreground picture](#foreground) too;
+Behind's goes under the render and the foreground both.
 
 In Front and Behind share one set of controls — Font, Stroke weight, Size, and
 the three boxes — and differ only in what is drawn over what. Text is always
