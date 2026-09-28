@@ -212,7 +212,7 @@ html, body {
   pointer-events: none;
 }
 #backdrop-art[hidden] { display: none; }
-#backdrop-image {
+#backdrop-image, #backdrop-frames {
   position: absolute;
   display: block;
   max-width: none;
@@ -411,6 +411,8 @@ html, body {
 /* The Image section shows only the rows for the chosen kind of background. */
 #image:not([data-background="solid"]) .bg-solid-only,
 #image:not([data-background="image"]) .bg-image-only { display: none; }
+#row-bg-sync[hidden], #bg-sync-note[hidden], #backdrop-image[hidden],
+#backdrop-frames[hidden] { display: none; }
 #background-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row.file-row { grid-template-columns: 1fr auto; }
 .row output { font-variant-numeric: tabular-nums; min-width: 64px; text-align: right; cursor: text; }

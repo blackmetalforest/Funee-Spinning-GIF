@@ -14,7 +14,7 @@ import vm from 'vm';
 
 import { frameDelaysMs, loopSummary, frameAngles, roundHalfToEven,
          frameStarts, frameIndexAt, SPIN_RATIOS, loopTurns,
-         framePoses, frameTimesMs } from '../src/encoders/timing.js';
+         framePoses, frameTimesMs, syncScale } from '../src/encoders/timing.js';
 import { playableDelays, PICTURE_MODEL_EXTENSIONS } from '../src/image-model.js';
 import { MODEL_EXTENSIONS } from '../src/archive.js';
 import { muxAnimation } from '../src/encoders/webp.js';
@@ -89,6 +89,25 @@ console.log('\npictures as models');
     same(playableDelays([10, 0, 10]), [100, 100, 100]));
   check('all five picture formats open', ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif']
     .every((ext) => PICTURE_MODEL_EXTENSIONS.includes(ext)));
+  {
+    // The two examples Sync was specified with.
+    const a = syncScale(2000, 4000);
+    check('sync: a 4 s GIF on a 2 s spin plays once at double speed',
+      a.plays === 1 && Math.abs(a.scale - 2) < 1e-12);
+    const b = syncScale(3000, 220);
+    check('sync: a 0.22 s GIF on a 3 s spin plays 14 times, 0.2143 s each',
+      b.plays === 14 && Math.abs(220 / b.scale - 3000 / 14) < 1e-9);
+    check('sync: rounds down when slowing is closer', syncScale(1000, 240).plays === 4);
+    check('sync: a far shorter loop still plays it once', syncScale(100, 5000).plays === 1);
+    check('sync: nothing to fit leaves the speed alone',
+      syncScale(3000, 0).scale === 1 && syncScale(0, 500).scale === 1);
+    // Over a whole loop the animation ends exactly where it began.
+    const n = 20;
+    const times = frameTimesMs(n, 0.5).map((t) => t * a.scale);
+    const next = (2000 * a.scale);
+    check('sync: the frame after the last is a whole number of plays',
+      Math.abs(next / 4000 - Math.round(next / 4000)) < 1e-9 && times[0] === 0);
+  }
   check('inside a zip a picture is still a texture, not a model',
     PICTURE_MODEL_EXTENSIONS.every((ext) => !MODEL_EXTENSIONS.has(ext)));
 }

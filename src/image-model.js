@@ -63,12 +63,14 @@ export function playableDelays(raw) {
   return raw.map((ms) => (allTiny || !(ms > 0) ? DEFAULT_DELAY_MS : ms));
 }
 
-const BITMAP_OPTIONS = {
-  // three.js cannot flip or un-premultiply an ImageBitmap at upload, so both
-  // are decided here, as ImageBitmapLoader does.
-  imageOrientation: 'flipY',
-  premultiplyAlpha: 'none',
-};
+/**
+ * three.js cannot flip or un-premultiply an ImageBitmap at upload, so both
+ * are decided here, as ImageBitmapLoader does. A texture wants the picture
+ * upside down; a background picture drawn by canvas wants it the right way up.
+ */
+function bitmapOptions(flipY) {
+  return { imageOrientation: flipY ? 'flipY' : 'from-image', premultiplyAlpha: 'none' };
+}
 
 /**
  * Decode `file` and build its card.
@@ -77,7 +79,7 @@ const BITMAP_OPTIONS = {
  *   the picture for the stats line.
  */
 export async function loadPictureModel(file, ext, { onProgress } = {}) {
-  const decoded = await decodeFrames(file, ext, onProgress);
+  const decoded = await decodePicture(file, ext, { onProgress });
   const { frames, delays, width, height } = decoded;
 
   const texture = new THREE.Texture(frames[0]);
@@ -121,10 +123,12 @@ export async function loadPictureModel(file, ext, { onProgress } = {}) {
 }
 
 /**
- * Every frame of the picture, flipped for upload, with its delay in ms.
- * A still is one frame with no meaningful delay.
+ * Every frame of a picture as ImageBitmaps, with each one's delay in ms. A
+ * still is one frame with no meaningful delay. `flipY` is for a texture; the
+ * background picture (main.js) asks for the frames the right way up.
  */
-async function decodeFrames(file, ext, onProgress) {
+export async function decodePicture(file, ext, { onProgress = null, flipY = true } = {}) {
+  const options = bitmapOptions(flipY);
   const type = MIME[ext] ?? file.type;
   const mayAnimate = ext === 'gif' || ext === 'webp' || ext === 'png';
 
@@ -134,12 +138,12 @@ async function decodeFrames(file, ext, onProgress) {
     if (supported) {
       // A file ImageDecoder chokes on may still open as a plain picture.
       let animated = null;
-      try { animated = await decodeAnimation(file, type, onProgress); } catch (err) { console.warn(err); }
+      try { animated = await decodeAnimation(file, type, onProgress, options); } catch (err) { console.warn(err); }
       if (animated) return animated;
     }
   }
 
-  const still = await decodeStill(file);
+  const still = await decodeStill(file, options);
   // A GIF or WebP that is animated but could not be played here still loads,
   // as its first frame; the stats line says what was lost.
   still.animationLost = mayAnimate && typeof ImageDecoder === 'undefined'
@@ -147,10 +151,10 @@ async function decodeFrames(file, ext, onProgress) {
   return still;
 }
 
-async function decodeStill(file) {
+async function decodeStill(file, options) {
   let bitmap;
   try {
-    bitmap = await createImageBitmap(file, BITMAP_OPTIONS);
+    bitmap = await createImageBitmap(file, options);
   } catch {
     throw new Error(`Could not read ${file.name} as a picture`);
   }
@@ -175,7 +179,7 @@ async function decodeStill(file) {
 }
 
 /** All frames through ImageDecoder, or null when the file is a still. */
-async function decodeAnimation(file, type, onProgress) {
+async function decodeAnimation(file, type, onProgress, options) {
   const decoder = new ImageDecoder({
     data: await file.arrayBuffer(), type, preferAnimation: true,
   });
@@ -194,7 +198,7 @@ async function decodeAnimation(file, type, onProgress) {
       try {
         if (!size) size = fitAnimation(image.displayWidth, image.displayHeight, count);
         frames.push(await createImageBitmap(image, {
-          ...BITMAP_OPTIONS,
+          ...options,
           resizeWidth: size.width, resizeHeight: size.height, resizeQuality: 'high',
         }));
         delays.push((image.duration ?? 0) / 1000);

@@ -192,3 +192,20 @@ export function frameTimesMs(nFrames, rps) {
   const loopMs = 1000 / rps;
   return Array.from({ length: n }, (_, i) => (loopMs * i) / n);
 }
+
+/**
+ * Sync: how fast to play an animated picture so a whole number of its plays
+ * fills one loop exactly — the whole loop, extra axes and all, which is what
+ * `loopMs` is. The number of plays is the nearest whole number, at least
+ * one, so the speed changes as little as it can: a 4 s animation on a 2 s
+ * spin plays once at double speed, and a 0.22 s one on a 3 s spin plays 14
+ * times, each 0.2143 s.
+ *
+ * Returns the factor that turns loop time into animation time, and the
+ * number of plays. With nothing to fit, the factor is 1.
+ */
+export function syncScale(loopMs, animationMs) {
+  if (!(loopMs > 0) || !(animationMs > 0)) return { scale: 1, plays: 0 };
+  const plays = Math.max(1, Math.round(loopMs / animationMs));
+  return { scale: (plays * animationMs) / loopMs, plays };
+}

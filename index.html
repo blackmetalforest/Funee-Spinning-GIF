@@ -41,7 +41,8 @@
       -->
       <div id="frame">
         <div id="backdrop"></div>
-        <div id="backdrop-art" hidden><img id="backdrop-image" alt=""></div>
+        <div id="backdrop-art" hidden><img id="backdrop-image" alt=""><canvas
+          id="backdrop-frames" hidden></canvas></div>
         <canvas id="canvas"></canvas>
         <canvas id="overlay"></canvas>
       </div>
@@ -126,6 +127,11 @@
           a face split across two materials can be changed as a whole.
         -->
         <div id="replacers" hidden></div>
+        <!-- Only for an animated picture loaded as the model; see readSpin(). -->
+        <div class="row" id="row-sync" hidden><label for="sync-anim">Sync</label>
+          <input type="checkbox" id="sync-anim" checked
+                 title="Speed the animation up or down so a whole number of plays fits one loop of the spin exactly, so the exported loop has no jump."></div>
+        <p id="sync-note" class="muted small" hidden></p>
         <p id="advanced-note" class="muted small"></p>
       </details>
     </section>
@@ -276,8 +282,13 @@
       <div class="row bg-image-only"><label for="background-x">Left / right</label>
         <input type="range" id="background-x" min="-100" max="100" step="1" value="0">
         <output for="background-x" id="background-x-out">0</output></div>
+      <!-- Only for an animated background picture; see readSpin(). -->
+      <div class="row bg-image-only" id="row-bg-sync" hidden><label for="bg-sync">Sync</label>
+        <input type="checkbox" id="bg-sync" checked
+               title="Speed the background's animation up or down so a whole number of plays fits one loop exactly, so the exported loop has no jump."></div>
+      <p id="bg-sync-note" class="muted small bg-image-only" hidden></p>
       <input id="background-file" type="file" hidden
-             accept=".jpg,.jpeg,.png,.webp,.bmp,image/jpeg,image/png,image/webp,image/bmp">
+             accept=".jpg,.jpeg,.png,.webp,.bmp,.gif,image/jpeg,image/png,image/webp,image/bmp,image/gif">
     </section>
 
     <section class="group" id="rendering">

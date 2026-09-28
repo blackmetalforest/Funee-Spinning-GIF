@@ -16,7 +16,7 @@
  * against ~8 ms for the fflate path. See src/encoders/png.js.
  */
 
-import { framePoses, frameTimesMs } from './encoders/timing.js';
+import { framePoses, frameTimesMs, frameIndexAt } from './encoders/timing.js';
 import { encodePng } from './encoders/png.js';
 import { drawText, drawBand, layoutBand } from './overlay-text.js';
 import { drawBackdrop } from './backdrop.js';
@@ -58,11 +58,19 @@ function makeResolver(width, height, caption, backdrop) {
   const total = height + band;
   if (band) out.height = total;
 
-  const resolve = (source) => {
+  // An animated background picture shows the frame for this moment of the loop.
+  const backdropAt = (ms) => {
+    const animation = backdrop?.animation;
+    if (!animation) return backdrop;
+    const index = frameIndexAt(animation.starts, animation.totalMs, ms);
+    return { ...backdrop, image: animation.frames[index] };
+  };
+
+  const resolve = (source, ms = 0) => {
     ctx.clearRect(0, 0, width, total);
     // Only when the user asked for one: left clear otherwise, so the alpha
     // channel still tells the exporters the truth about what is see-through.
-    drawBackdrop(ctx, backdrop, { width, height, top: band, total });
+    drawBackdrop(ctx, backdropAt(ms), { width, height, top: band, total });
     // The caption goes on *after* the downsample, at the true output size, so
     // its edges stay sharp instead of being softened along with the render.
     // Here rather than at save time because it belongs to the frame: one
@@ -91,8 +99,9 @@ function makeResolver(width, height, caption, backdrop) {
  * @param {{mode:string, text:object, band:string, family:string,
  *          weight:number, scale:number}} [caption]
  * @param {null | {colour:string} | {image:CanvasImageSource, size:number,
- *          x:number, y:number}} [backdrop] the background layer; see
- *   drawBackdrop(). Null leaves the frame clear.
+ *          x:number, y:number, animation?:{frames, starts, totalMs}}} [backdrop]
+ *   the background layer; see drawBackdrop(). Null leaves the frame clear.
+ *   With `animation`, each frame draws the picture showing at that moment.
  * @returns {Promise<{blobs: Blob[], width: number, height: number} | null>}
  *   `height` is the height of the finished image, which "On Top" makes taller
  *   than the render. Every exporter reads it from here rather than from the
@@ -103,8 +112,11 @@ export async function captureFrames(scene, spin, onProgress, caption = null,
   const { width, height } = scene.settings;
   // [spin, tumble, roll] per frame; see framePoses().
   const poses = framePoses(spin.frames, spin);
-  // Where an animated picture is in its own run at each frame.
+  // Where the loop is at each frame. An animated model and an animated
+  // background each play against it at their own Sync's speed.
   const times = frameTimesMs(spin.frames, spin.rps);
+  const modelScale = spin.animScale ?? 1;
+  const backdropScale = spin.backdropScale ?? 1;
   // The renderer no longer paints the background, so the composer does.
   const { resolve, height: outHeight } = makeResolver(width, height, caption, backdrop);
   const blobs = [];
@@ -117,11 +129,11 @@ export async function captureFrames(scene, spin, onProgress, caption = null,
   try {
     for (let i = 0; i < poses.length; i++) {
       scene.setAngle(...poses[i]);
-      scene.setTime(times[i]);
+      scene.setTime(times[i] * modelScale);
       scene.render();
 
       // PNG keeps the frame store lossless; see the note at the top of the file.
-      const png = encodePng(resolve(scene.canvas));
+      const png = encodePng(resolve(scene.canvas, times[i] * backdropScale));
       blobs.push(new Blob([png], { type: 'image/png' }));
 
       if (onProgress && onProgress(i + 1, poses.length) === false) return null;

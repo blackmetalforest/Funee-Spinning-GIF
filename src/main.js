@@ -17,7 +17,8 @@ import { placeBackdrop } from './backdrop.js';
 import { PRESETS, PRESET_KEYS, presetValues, matchingPreset } from './presets.js';
 import { captureFrames, decodeFrames, storeSize } from './capture.js';
 import { loopSummary, FPS_LIMIT, frameDelaysMs, frameStarts, frameIndexAt,
-         SPIN_RATIOS, loopTurns, framePoses, frameTimesMs } from './encoders/timing.js';
+         SPIN_RATIOS, loopTurns, framePoses, frameTimesMs, syncScale } from './encoders/timing.js';
+import { decodePicture } from './image-model.js';
 import { encodeGif } from './encoders/gif.js';
 import { muxAnimation, encodeStill } from './encoders/webp.js';
 import { muxApng } from './encoders/apng.js';
@@ -180,24 +181,46 @@ function readExtraAxes() {
  * loops per second, which is what the delay tables divide up.
  */
 function readSpin() {
+  return withBackdropSync(readModelSpin());
+}
+
+/**
+ * Sync for the background picture: the same fit as the model's, against the
+ * same whole loop — which, with the spin stopped, may be the model's own
+ * animation. A background that is itself the loop fits once, at full speed.
+ */
+function withBackdropSync(spin) {
+  const animationMs = backdropAnimationMs();
+  const on = animationMs > 0 && !spin.stopped && spin.rps > 0 && $('bg-sync').checked;
+  const { scale, plays } = on ? syncScale(1000 / spin.rps, animationMs) : { scale: 1, plays: 0 };
+  return { ...spin, backdropScale: scale, backdropPlays: plays };
+}
+
+function readModelSpin() {
   const turnRps = +$('speed').value;
   const clockwise = $('direction').value === 'cw';
   // Nothing spinning, but an animated picture: the loop is the animation, and
-  // `turns` 0 holds every pose still while its frames play.
-  const animationMs = scene.animationMs;
+  // `turns` 0 holds every pose still while its frames play. The model's
+  // animation sets the length if it has one, else the background's.
+  const animationMs = scene.animationMs || backdropAnimationMs();
   if (!(turnRps > 0) && animationMs > 0) {
     const rps = 1000 / animationMs;
     const { frames, ideal } = framesFor(+$('fps').value, rps);
-    return { frames, ideal, stopped: false, still: true, turns: 0, axes: [], rps, clockwise };
+    return {
+      frames, ideal, stopped: false, still: true, turns: 0, axes: [], rps, clockwise,
+      animScale: 1, plays: 0,
+    };
   }
   const axes = readExtraAxes();
   const turns = loopTurns(axes);
-  const { frames, ideal, stopped } = framesFor(+$('fps').value, turnRps / turns);
-  return {
-    frames, ideal, stopped, turns, axes,
-    rps: turnRps / turns,
-    clockwise: $('direction').value === 'cw',
-  };
+  const rps = turnRps / turns;
+  const { frames, ideal, stopped } = framesFor(+$('fps').value, rps);
+  // Sync fits the model's animation to the whole loop, every axis included,
+  // which is what `rps` (loops per second) already describes.
+  const { scale, plays } = !stopped && $('sync-anim').checked
+    ? syncScale(1000 / rps, scene.animationMs)
+    : { scale: 1, plays: 0 };
+  return { frames, ideal, stopped, turns, axes, rps, clockwise, animScale: scale, plays };
 }
 
 function clampInt(value, lo, hi, fallback) {
@@ -246,10 +269,17 @@ function readCaption() {
 
 /**
  * The picture chosen for an Image background, decoded once and kept:
- * `{ bitmap, url, name }`. The bitmap is what the export draws; the object URL
- * feeds the preview's <img>. Null until something is chosen.
+ * `{ bitmap, url, name, animation }`. The bitmap is what the export draws; the
+ * object URL feeds the preview's <img>. An animated GIF or WebP also carries
+ * `animation: { frames, starts, totalMs }`, every frame decoded, and bitmap is
+ * its first. Null until something is chosen.
  */
 let backdropPicture = null;
+
+/** Length of the background picture's animation in ms, 0 when it has none or is not shown. */
+function backdropAnimationMs() {
+  return $('background-mode').value === 'image' ? backdropPicture?.animation?.totalMs ?? 0 : 0;
+}
 
 /**
  * The background layer to paint under the render, or null to leave it clear.
@@ -265,6 +295,7 @@ function readBackdrop() {
     case 'image':
       return backdropPicture && {
         image: backdropPicture.bitmap,
+        animation: backdropPicture.animation,
         size: +$('background-size').value,
         x: +$('background-x').value,
         y: +$('background-y').value,
@@ -285,11 +316,33 @@ function placePreviewPicture(backdrop, w, h) {
   if (art.hidden) return;
   const { image } = backdrop;
   const place = placeBackdrop(image.width, image.height, w, h, backdrop);
-  const style = $('backdrop-image').style;
-  style.left = `${(place.x / w) * 100}%`;
-  style.top = `${(place.y / h) * 100}%`;
-  style.width = `${(place.width / w) * 100}%`;
-  style.height = `${(place.height / h) * 100}%`;
+  for (const id of ['backdrop-image', 'backdrop-frames']) {
+    const style = $(id).style;
+    style.left = `${(place.x / w) * 100}%`;
+    style.top = `${(place.y / h) * 100}%`;
+    style.width = `${(place.width / w) * 100}%`;
+    style.height = `${(place.height / h) * 100}%`;
+  }
+}
+
+/*
+ * An animated background is drawn into a canvas by the preview itself rather
+ * than left to the <img>, which would play at its own pace whatever Sync says.
+ * Driven by the same clock as the spin, so the preview shows the background
+ * frame the export will — and like the model's animation, it holds its first
+ * frame while Preview is off.
+ */
+let backdropFrameShown = -1;
+function showBackdropFrame(ms) {
+  const animation = backdropPicture?.animation;
+  if (!animation) return;
+  const index = frameIndexAt(animation.starts, animation.totalMs, ms);
+  if (index === backdropFrameShown) return;
+  backdropFrameShown = index;
+  const canvas = $('backdrop-frames');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(animation.frames[index], 0, 0, canvas.width, canvas.height);
 }
 
 /**
@@ -503,8 +556,38 @@ function syncFrameCount() {
     : turns > 1 ? `frame rate ÷ spin speed × ${turns} spins` : 'frame rate ÷ spin speed';
 }
 
+/** What a Sync checkbox is doing to its animation, for the line under it. */
+function syncText({ animationMs, checked, scale, plays, isLoop, stopped }) {
+  if (isLoop) return 'Not spinning: the loop is this animation itself, at its own speed.';
+  if (stopped) return 'Nothing moves, so there is nothing to sync to.';
+  if (!checked) return 'Off: the animation plays at its own speed and may jump where the loop restarts.';
+  const percent = Math.round(scale * 100);
+  const each = (animationMs / scale / 1000).toFixed(3);
+  return `Plays ${plays}× per loop, ${each} s each (${percent}% speed).`;
+}
+
+function updateSyncNote(spin) {
+  if (scene.animationMs) {
+    $('sync-note').textContent = syncText({
+      animationMs: scene.animationMs, checked: $('sync-anim').checked,
+      scale: spin.animScale, plays: spin.plays, isLoop: spin.still, stopped: spin.stopped,
+    });
+  }
+  const backdropMs = backdropAnimationMs();
+  if (backdropMs) {
+    $('bg-sync-note').textContent = syncText({
+      animationMs: backdropMs, checked: $('bg-sync').checked,
+      scale: spin.backdropScale, plays: spin.backdropPlays,
+      // With the spin stopped, the background is the loop unless the model's
+      // own animation already is.
+      isLoop: spin.still && !scene.animationMs, stopped: spin.stopped,
+    });
+  }
+}
+
 function updateLoopInfo() {
   const spin = readSpin();
+  updateSyncNote(spin);
   if (spin.stopped) {
     // Quoting a turn length or a rate here would be inventing numbers: with
     // nothing moving there is no turn to time.
@@ -632,12 +715,15 @@ function startPump() {
 let playing = false;
 let playEpoch = 0;
 let shownIndex = -1;
-const cycle = { angles: [], times: [], starts: [], totalMs: 0 };
+const cycle = { angles: [], times: [], backdropTimes: [], starts: [], totalMs: 0 };
 
 function rebuildCycle() {
   const spin = readSpin();
   cycle.angles = framePoses(spin.frames, spin);
-  cycle.times = frameTimesMs(spin.frames, spin.rps);
+  // The model's animation clock, at Sync's speed; see captureFrames().
+  const times = frameTimesMs(spin.frames, spin.rps);
+  cycle.times = times.map((t) => t * spin.animScale);
+  cycle.backdropTimes = times.map((t) => t * spin.backdropScale);
   // GIF's grid, the same one #loop-info quotes: the coarsest of the formats,
   // and the only one whose quantisation is visible as judder.
   const { starts, totalMs } = frameStarts(frameDelaysMs(spin.frames, spin.rps, 'gif'));
@@ -671,6 +757,7 @@ function advancePlayback(now) {
   shownIndex = index;
   scene.setAngle(...cycle.angles[index]);
   scene.setTime(cycle.times[index]);
+  showBackdropFrame(cycle.backdropTimes[index]);
   return true;
 }
 
@@ -692,6 +779,7 @@ function stopPlayback({ rewind = true } = {}) {
   // Frame 0 is what every other still preview shows, and what the next
   // settings change would snap to anyway.
   if (rewind && scene.model) { scene.setAngle(0); scene.setTime(0); scene.render(); }
+  showBackdropFrame(0);
 }
 
 /*
@@ -781,9 +869,11 @@ function schedulePreview() {
       shownIndex = playbackIndexAt(performance.now());
       scene.setAngle(...cycle.angles[shownIndex]);
       scene.setTime(cycle.times[shownIndex]);
+      showBackdropFrame(cycle.backdropTimes[shownIndex]);
     } else {
       scene.setAngle(0);
       scene.setTime(0);
+      showBackdropFrame(0);
     }
     scene.render();
     recordTextureFit();
@@ -1010,7 +1100,12 @@ function showAdvanced(report) {
 
   const pruning = renderMeshList();
 
-  panel.hidden = picking === 0 && !swapping && !pruning;
+  // Sync belongs to an animated picture loaded as the model, and to nothing else.
+  const syncing = scene.animationMs > 0;
+  $('row-sync').hidden = !syncing;
+  $('sync-note').hidden = !syncing;
+
+  panel.hidden = picking === 0 && !swapping && !pruning && !syncing;
   if (panel.hidden) panel.open = false;
 
   const note = [];
@@ -1627,6 +1722,31 @@ $('speed').addEventListener('input', (e) => {
   if (+$('speed').value > 0 && +$('speed').value < MIN_RPS) $('speed').value = 0;
 });
 
+/*
+ * The rotation sliders catch on a right angle: dragged anywhere from 88° to
+ * 92° (either sign), they land on exactly 90°, which is hard to hit by hand
+ * and the angle most often wanted. Only a pointer drag snaps. A typed value
+ * and the arrow keys stay exact, so 89° is still one keypress or a
+ * double-click away — and the keys never get stuck on 90. Registered before
+ * the listener below for the same reason as the speed snap.
+ */
+const SNAP_ANGLE_IDS = ['start', 'pitch', 'yaw', 'roll'];
+const SNAP_ANGLE = 90;
+const SNAP_WITHIN = 2;
+let snapDragging = false;
+window.addEventListener('pointerup', () => { snapDragging = false; });
+window.addEventListener('pointercancel', () => { snapDragging = false; });
+for (const id of SNAP_ANGLE_IDS) {
+  $(id).addEventListener('pointerdown', () => { snapDragging = true; });
+  $(id).addEventListener('input', (e) => {
+    if (!snapDragging || e.detail?.typed) return;
+    const value = +$(id).value;
+    if (Math.abs(Math.abs(value) - SNAP_ANGLE) <= SNAP_WITHIN) {
+      $(id).value = Math.sign(value) * SNAP_ANGLE;
+    }
+  });
+}
+
 for (const id of RANGE_IDS) $(id).addEventListener('input', applyAndPreview);
 
 for (const id of RANGE_IDS) {
@@ -1635,7 +1755,7 @@ for (const id of RANGE_IDS) {
   $(id).addEventListener('change', () => normaliseRange(id));
 }
 for (const id of ['up-axis', 'direction', 'quality', 'background', 'background-mode',
-  'width', 'height', 'tumble-dir', 'tumble-ratio', 'roll-dir', 'roll-ratio']) {
+  'width', 'height', 'tumble-dir', 'tumble-ratio', 'roll-dir', 'roll-ratio', 'sync-anim', 'bg-sync']) {
   $(id).addEventListener('input', () => { discardStore(); applyAndPreview(); });
 }
 
@@ -1653,41 +1773,73 @@ function syncBackgroundChrome() {
 }
 $('background-mode').addEventListener('input', syncBackgroundChrome);
 
-const PICTURE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/bmp']);
-const PICTURE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'bmp']);
+const PICTURE_TYPES = new Map([['image/jpeg', 'jpg'], ['image/png', 'png'],
+  ['image/webp', 'webp'], ['image/bmp', 'bmp'], ['image/gif', 'gif']]);
+const PICTURE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif']);
 
 /**
  * Decode a chosen picture and make it the background.
  *
- * Decoded up front, once, into an ImageBitmap: every exported frame draws it,
- * and a picture that will not decode is better reported now than discovered
- * halfway through a render. The previous picture is kept until the new one
- * has proved itself.
+ * Decoded up front, once, into ImageBitmaps — every frame of an animated GIF
+ * or WebP, by the same decoder a picture model uses (src/image-model.js):
+ * every exported frame draws one, and a picture that will not decode is
+ * better reported now than discovered halfway through a render. The previous
+ * picture is kept until the new one has proved itself.
+ *
+ * The preview's <img> animates by itself, at the picture's own speed, and so
+ * does the export: frame i shows whatever the animation shows at frame i's
+ * moment in the loop.
  */
 async function chooseBackdropPicture(file) {
   if (!file) return;
   const name = $('background-name');
-  const known = PICTURE_TYPES.has(file.type)
-    || PICTURE_EXTENSIONS.has(extOf(file.name));
-  if (!known) {
-    name.textContent = `${file.name} is not a JPEG, PNG, WebP or BMP`;
+  const ext = PICTURE_EXTENSIONS.has(extOf(file.name)) ? extOf(file.name) : PICTURE_TYPES.get(file.type);
+  if (!ext) {
+    name.textContent = `${file.name} is not a JPEG, PNG, WebP, BMP or GIF`;
     return;
   }
-  let bitmap;
+  let decoded;
+  setBusy(`Loading ${file.name}…`);
   try {
-    bitmap = await createImageBitmap(file);
+    decoded = await decodePicture(file, ext, {
+      flipY: false,
+      onProgress: (done, total) => setBusy(`Loading ${file.name}… frame ${done} of ${total}`),
+    });
   } catch {
     name.textContent = `Could not read ${file.name}`;
     return;
+  } finally {
+    setBusy('');
   }
   if (backdropPicture) {
-    backdropPicture.bitmap.close();
+    for (const frame of backdropPicture.frames) frame.close();
     URL.revokeObjectURL(backdropPicture.url);
   }
-  backdropPicture = { bitmap, url: URL.createObjectURL(file), name: file.name };
+  const { frames, delays } = decoded;
+  let animation = null;
+  if (frames.length > 1) {
+    const starts = [];
+    let totalMs = 0;
+    for (const delay of delays) { starts.push(totalMs); totalMs += delay; }
+    animation = { frames, starts, totalMs };
+  }
+  backdropPicture = {
+    bitmap: frames[0], frames, animation, url: URL.createObjectURL(file), name: file.name,
+  };
   $('backdrop-image').src = backdropPicture.url;
+  $('backdrop-image').hidden = !!animation;
+  $('backdrop-frames').hidden = !animation;
+  $('row-bg-sync').hidden = !animation;
+  $('bg-sync-note').hidden = !animation;
+  if (animation) {
+    $('backdrop-frames').width = frames[0].width;
+    $('backdrop-frames').height = frames[0].height;
+    backdropFrameShown = -1;
+    showBackdropFrame(0);
+  }
   name.textContent = file.name;
-  name.title = `${file.name} · ${bitmap.width} × ${bitmap.height}`;
+  name.title = `${file.name} · ${decoded.sourceWidth} × ${decoded.sourceHeight}`
+    + (animation ? ` · ${frames.length} frames · ${(animation.totalMs / 1000).toFixed(2)} s` : '');
   discardStore();
   applyAndPreview();
 }

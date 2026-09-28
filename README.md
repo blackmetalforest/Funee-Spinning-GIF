@@ -162,9 +162,17 @@ The animation runs at its own speed, whatever the spin speed is:
 - **Spin speed 0** makes the loop the animation itself: the frame count is the
   frame rate × the animation's length, so it loops exactly, and the card holds
   still facing you.
-- **While spinning**, the loop is the spin's, and the animation is sampled
-  against it. If the animation's length does not divide the loop's, it jumps
-  back to its start where the GIF loops.
+- **While spinning**, the loop is the spin's. **Sync** (under the model's
+  **Advanced**, shown only for an animated picture, on by default) changes
+  the animation's speed as little as it can so that a whole number of plays
+  fills the loop exactly, and the exported GIF loops without a jump. A 4 s
+  animation on a 2 s spin plays once at double speed; a 0.22 s one on a 3 s
+  spin plays 14 times at 0.214 s each. The loop is the *whole* loop — with a
+  3:1 tumble it is three spins long, and the animation is fitted to all
+  three. A line under the checkbox says how many plays and at what speed.
+  With Sync off the animation keeps its own speed and jumps back to its
+  start wherever the loop restarts. Fitting 15 frames across 20 output frames
+  shows some unevenly; that is expected.
 
 Frame delays are read as written, so the common "60 fps" GIF whose delays run
 20, 20, 10 ms plays at 60 fps. Only a missing or zero delay is read as 100 ms,
@@ -530,6 +538,10 @@ Translation is in **bounding-sphere radii**: the model is normalised to radius 1
 on load, so 1.0 shifts it by its own radius whatever its real-world scale.
 Rotations apply in YXZ order (yaw, then pitch, then roll).
 
+Dragging a rotation slider — Pitch, Yaw, Roll, or View's Start rotation —
+catches on 90° anywhere from 88° to 92° (and the same below zero). The arrow
+keys and a typed value are exact, so 89° is still easy to set.
+
 Each label names what a *positive* value does. The sliders cover ±2 radii,
 which is all most framing needs; double-clicking the number takes a translation
 out to ±100 for the rare model that arrives wildly off its own origin.
@@ -578,8 +590,26 @@ The Image section's **Background** is one of three:
 - **Transparent** (the default) — nothing is painted under the render; the
   preview shows the checkerboard and the export keeps its alpha.
 - **Solid colour** — a colour fills the whole frame, On Top's band included.
-- **Image** — a JPEG, PNG, WebP or BMP under the render, with **Size**,
+- **Image** — a JPEG, PNG, WebP, BMP or GIF under the render, with **Size**,
   **Up / down** and **Left / right** sliders that all start in the middle.
+
+An **animated** GIF or WebP background animates in the export as well as in
+the preview: every frame is decoded when it is chosen, by the same decoder a
+picture model uses, and each exported frame draws the one showing at that
+moment. The preview draws those same frames on the spin's clock, rather than
+leaving the browser to play the picture at its own pace, so what it shows is
+what the export gets; like an animated model, it holds its first frame while
+Preview is off.
+
+The background has its own **Sync** checkbox, shown under the position
+sliders only for an animated picture and on by default. It works exactly like
+the model's (see [Pictures](#pictures)): the animation's speed changes as
+little as it can so that a whole number of plays fills the whole loop, and a
+line under the checkbox says how many and at what speed. The model and the
+background are fitted separately, each to the same loop. With the spin
+stopped, the loop is the model's animation if it has one — the background is
+fitted to that — and otherwise the background's own, which then plays once at
+its own speed.
 
 A picture is fitted to the image's **height** at 100%, so a wide photo on a
 square image loses its left and right sides and a tall one leaves clear strips
