@@ -13,11 +13,12 @@ import { loadModel, FILE_ACCEPT, SELF_CONTAINED, AUTO, NONE } from './loaders.js
 import { baseName, stemOf, extOf, IMAGE_EXTENSIONS } from './archive.js';
 import { labelMeshes, toggleLabel, meshSummary } from './mesh-list.js';
 import { drawText, drawBand, layoutBand, isBlank } from './overlay-text.js';
-import { placeBackdrop } from './backdrop.js';
+import { placeBackdrop, drawBackdrop } from './backdrop.js';
 import { PRESETS, PRESET_KEYS, presetValues, matchingPreset } from './presets.js';
 import { captureFrames, decodeFrames, storeSize } from './capture.js';
 import { loopSummary, FPS_LIMIT, frameDelaysMs, frameStarts, frameIndexAt,
-         SPIN_RATIOS, loopTurns, framePoses, frameTimesMs, syncScale } from './encoders/timing.js';
+         SPIN_RATIOS, loopTurns, framePoses, frameTimesMs, syncScale,
+         syncLoops } from './encoders/timing.js';
 import { decodePicture } from './image-model.js';
 import { encodeGif } from './encoders/gif.js';
 import { muxAnimation, encodeStill } from './encoders/webp.js';
@@ -43,7 +44,7 @@ const RANGE_IDS = ['elevation', 'start', 'fov', 'zoom', 'speed', 'fps',
   'normal-strength', 'emission-strength',
   'pos-x', 'pos-y', 'pos-z', 'pitch', 'yaw', 'roll',
   'text-stroke', 'text-size',
-  'background-size', 'background-x', 'background-y'];
+  'background-size', 'background-x', 'background-y', 'fg-size', 'fg-x', 'fg-y'];
 
 // The Rendering section's choices. Like the Image section's, each one changes
 // what a render produces, so each drops the frame store. Lighting ('shading')
@@ -63,7 +64,7 @@ const layerState = Object.fromEntries(LAYERS.map((l) => [l.key, true]));
 const POSITION_IDS = ['pos-x', 'pos-y', 'pos-z', 'pitch', 'yaw', 'roll'];
 
 // So do the background picture's, which are baked into every frame.
-const PICTURE_IDS = ['background-size', 'background-x', 'background-y'];
+const PICTURE_IDS = ['background-size', 'background-x', 'background-y', 'fg-size', 'fg-x', 'fg-y'];
 
 const FORMAT_LABELS = { gif: 'GIF', webp: 'WebP', apng: 'APNG', zip: 'ZIP' };
 
@@ -180,47 +181,78 @@ function readExtraAxes() {
  * times the file is per loop: the frame count covers all of it, and `rps` is
  * loops per second, which is what the delay tables divide up.
  */
-function readSpin() {
-  return withBackdropSync(readModelSpin());
-}
-
-/**
- * Sync for the background picture: the same fit as the model's, against the
- * same whole loop — which, with the spin stopped, may be the model's own
- * animation. A background that is itself the loop fits once, at full speed.
+/*
+ * Up to three animated pictures can play in one loop: the model, the
+ * background and the foreground. Each has its own Sync checkbox, and the rule
+ * is the same for all three, applied in two steps:
+ *
+ *  1. The loop is the spin's, every axis included — lengthened by whole
+ *     loops if the longest *synced* animation is longer than it (syncLoops),
+ *     so no animation is ever rushed through a loop far too short for it.
+ *  2. Each synced animation is then fitted to that one loop on its own
+ *     (syncScale): the nearest whole number of plays, at whatever small
+ *     change of speed that takes.
+ *
+ * Step 2 is what makes any combination work. The layers never have to fit
+ * each other, only the loop, so there is always an answer; the price is
+ * that an animation plays a little faster or slower than it was made.
+ *
+ * With the spin stopped the loop is an animation instead: the longest synced
+ * one, played once at its own speed, and the others are fitted to it the same
+ * way. The longest, so that the rest only ever need a nudge — a 0.5 s model
+ * setting the loop would squeeze a 5 s background ten times over. With no
+ * Sync ticked it is simply the longest animation there is.
  */
-function withBackdropSync(spin) {
-  const animationMs = backdropAnimationMs();
-  const on = animationMs > 0 && !spin.stopped && spin.rps > 0 && $('bg-sync').checked;
-  const { scale, plays } = on ? syncScale(1000 / spin.rps, animationMs) : { scale: 1, plays: 0 };
-  return { ...spin, backdropScale: scale, backdropPlays: plays };
+function animatedLayers() {
+  return [
+    { key: 'model', ms: scene.animationMs, sync: $('sync-anim').checked },
+    { key: 'backdrop', ms: backdropAnimationMs(), sync: $('bg-sync').checked },
+    { key: 'foreground', ms: foregroundAnimationMs(), sync: $('fg-sync').checked },
+  ];
 }
 
-function readModelSpin() {
+function readSpin() {
+  const layers = animatedLayers();
+  const spin = readLoop(layers);
+  // Every layer's clock: loop time × scale is that layer's animation time.
+  const fit = {};
+  for (const { key, ms, sync } of layers) {
+    fit[key] = ms > 0 && sync && !spin.stopped && spin.rps > 0
+      ? syncScale(1000 / spin.rps, ms)
+      : { scale: 1, plays: 0 };
+  }
+  return {
+    ...spin,
+    animScale: fit.model.scale, plays: fit.model.plays,
+    backdropScale: fit.backdrop.scale, backdropPlays: fit.backdrop.plays,
+    foregroundScale: fit.foreground.scale, foregroundPlays: fit.foreground.plays,
+  };
+}
+
+/** The loop: its frames, its length (as `rps`, loops per second) and its turns. */
+function readLoop(layers) {
   const turnRps = +$('speed').value;
   const clockwise = $('direction').value === 'cw';
   // Nothing spinning, but an animated picture: the loop is the animation, and
-  // `turns` 0 holds every pose still while its frames play. The model's
-  // animation sets the length if it has one, else the background's.
-  const animationMs = scene.animationMs || backdropAnimationMs();
-  if (!(turnRps > 0) && animationMs > 0) {
-    const rps = 1000 / animationMs;
+  // `turns` 0 holds every pose still while its frames play.
+  const longestOf = (list) => list.reduce((best, layer) => (layer.ms > (best?.ms ?? 0) ? layer : best), null);
+  const leader = longestOf(layers.filter(({ sync }) => sync)) ?? longestOf(layers);
+  if (!(turnRps > 0) && leader) {
+    const rps = 1000 / leader.ms;
     const { frames, ideal } = framesFor(+$('fps').value, rps);
     return {
-      frames, ideal, stopped: false, still: true, turns: 0, axes: [], rps, clockwise,
-      animScale: 1, plays: 0,
+      frames, ideal, stopped: false, still: true, leader: leader.key,
+      turns: 0, loops: 1, axes: [], rps, clockwise,
     };
   }
   const axes = readExtraAxes();
-  const turns = loopTurns(axes);
+  const baseTurns = loopTurns(axes);
+  const longest = Math.max(0, ...layers.filter(({ sync }) => sync).map(({ ms }) => ms));
+  const loops = turnRps > 0 ? syncLoops((1000 * baseTurns) / turnRps, longest) : 1;
+  const turns = baseTurns * loops;
   const rps = turnRps / turns;
   const { frames, ideal, stopped } = framesFor(+$('fps').value, rps);
-  // Sync fits the model's animation to the whole loop, every axis included,
-  // which is what `rps` (loops per second) already describes.
-  const { scale, plays } = !stopped && $('sync-anim').checked
-    ? syncScale(1000 / rps, scene.animationMs)
-    : { scale: 1, plays: 0 };
-  return { frames, ideal, stopped, turns, axes, rps, clockwise, animScale: scale, plays };
+  return { frames, ideal, stopped, turns, loops, axes, rps, clockwise };
 }
 
 function clampInt(value, lo, hi, fallback) {
@@ -243,7 +275,8 @@ function clampInt(value, lo, hi, fallback) {
  */
 function readCaption() {
   const mode = $('text-mode').value;
-  if (mode === 'off') return null;
+  // Foreground Image puts a picture where the text would go; see readForeground().
+  if (mode === 'off' || mode === 'image') return null;
 
   const style = {
     mode,
@@ -275,6 +308,33 @@ function readCaption() {
  * its first. Null until something is chosen.
  */
 let backdropPicture = null;
+
+/**
+ * The picture chosen for Text → Foreground Image: the same shape as
+ * backdropPicture, drawn over the render instead of under it.
+ */
+let foregroundPicture = null;
+
+/** Length of the foreground picture's animation in ms, 0 when it has none or is not shown. */
+function foregroundAnimationMs() {
+  return $('text-mode').value === 'image' ? foregroundPicture?.animation?.totalMs ?? 0 : 0;
+}
+
+/**
+ * The foreground layer to paint over the render, or null for none — the
+ * background's `{ image, animation, size, x, y }`, placed by the same
+ * placeBackdrop() and drawn by the same drawBackdrop().
+ */
+function readForeground() {
+  if ($('text-mode').value !== 'image' || !foregroundPicture) return null;
+  return {
+    image: foregroundPicture.bitmap,
+    animation: foregroundPicture.animation,
+    size: +$('fg-size').value,
+    x: +$('fg-x').value,
+    y: +$('fg-y').value,
+  };
+}
 
 /** Length of the background picture's animation in ms, 0 when it has none or is not shown. */
 function backdropAnimationMs() {
@@ -343,6 +403,29 @@ function showBackdropFrame(ms) {
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(animation.frames[index], 0, 0, canvas.width, canvas.height);
+}
+
+/*
+ * The foreground picture is painted into the caption's overlay canvas, which
+ * sits over the render just as the export stacks it. An animated one is
+ * repainted on the spin's clock, like the background, and only when its
+ * frame actually changes.
+ */
+let foregroundPreviewMs = 0;
+let foregroundShown = -1;
+function paintForeground(ms = foregroundPreviewMs) {
+  foregroundPreviewMs = ms;
+  const foreground = readForeground();
+  const overlay = $('overlay');
+  if (!foreground || overlay.hidden) return;
+  const { animation } = foreground;
+  const index = animation ? frameIndexAt(animation.starts, animation.totalMs, ms) : 0;
+  if (index === foregroundShown) return;
+  foregroundShown = index;
+  const ctx = overlay.getContext('2d');
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+  const image = animation ? animation.frames[index] : foreground.image;
+  drawBackdrop(ctx, { ...foreground, image }, { width: overlay.width, height: overlay.height });
 }
 
 /**
@@ -466,6 +549,8 @@ function drawPreviewCaption() {
   const ctx = overlay.getContext('2d');
   ctx.clearRect(0, 0, overlay.width, overlay.height);
   overlay.hidden = hidden;
+  foregroundShown = -1;
+  paintForeground();
   if (!caption || hidden) return;
 
   if (caption.mode === 'ontop') {
@@ -520,7 +605,8 @@ function syncOutputs() {
   $('text-stroke-out').textContent = (+$('text-stroke').value).toFixed(1);
   $('text-size-out').textContent = `${$('text-size').value}%`;
   $('background-size-out').textContent = `${$('background-size').value}%`;
-  for (const id of ['background-x', 'background-y']) {
+  $('fg-size-out').textContent = `${$('fg-size').value}%`;
+  for (const id of ['background-x', 'background-y', 'fg-x', 'fg-y']) {
     $(`${id}-out`).textContent = $(id).value;
   }
   for (const id of ['pos-x', 'pos-y', 'pos-z']) {
@@ -538,7 +624,7 @@ function syncOutputs() {
  * which the loop summary underneath then shows as a lower figure.
  */
 function syncFrameCount() {
-  const { frames, ideal, stopped, turns } = readSpin();
+  const { frames, ideal, stopped, turns, loops } = readSpin();
   const out = $('frames-out');
   out.textContent = frames;
   if (stopped) {
@@ -553,34 +639,36 @@ function syncFrameCount() {
   $('frames-note').textContent = ideal > FRAMES_MAX
     ? `capped from ${ideal.toLocaleString()}`
     : turns === 0 ? 'frame rate × animation length'
-    : turns > 1 ? `frame rate ÷ spin speed × ${turns} spins` : 'frame rate ÷ spin speed';
+    : turns > 1 ? `frame rate ÷ spin speed × ${turns} spins${loops > 1 ? ' (Sync)' : ''}`
+    : 'frame rate ÷ spin speed';
 }
 
 /** What a Sync checkbox is doing to its animation, for the line under it. */
-function syncText({ animationMs, checked, scale, plays, isLoop, stopped }) {
+function syncText({ animationMs, checked, scale, plays, isLoop, stopped, turns }) {
   if (isLoop) return 'Not spinning: the loop is this animation itself, at its own speed.';
   if (stopped) return 'Nothing moves, so there is nothing to sync to.';
   if (!checked) return 'Off: the animation plays at its own speed and may jump where the loop restarts.';
   const percent = Math.round(scale * 100);
   const each = (animationMs / scale / 1000).toFixed(3);
-  return `Plays ${plays}× per loop, ${each} s each (${percent}% speed).`;
+  const loop = turns > 1 ? `loop of ${turns} spins` : 'loop';
+  return `Plays ${plays}× per ${loop}, ${each} s each (${percent}% speed).`;
 }
 
+/** The line under each Sync checkbox, for every layer that is animated. */
+const SYNC_NOTES = {
+  model: { note: 'sync-note', box: 'sync-anim', scale: 'animScale', plays: 'plays' },
+  backdrop: { note: 'bg-sync-note', box: 'bg-sync', scale: 'backdropScale', plays: 'backdropPlays' },
+  foreground: { note: 'fg-sync-note', box: 'fg-sync', scale: 'foregroundScale', plays: 'foregroundPlays' },
+};
+
 function updateSyncNote(spin) {
-  if (scene.animationMs) {
-    $('sync-note').textContent = syncText({
-      animationMs: scene.animationMs, checked: $('sync-anim').checked,
-      scale: spin.animScale, plays: spin.plays, isLoop: spin.still, stopped: spin.stopped,
-    });
-  }
-  const backdropMs = backdropAnimationMs();
-  if (backdropMs) {
-    $('bg-sync-note').textContent = syncText({
-      animationMs: backdropMs, checked: $('bg-sync').checked,
-      scale: spin.backdropScale, plays: spin.backdropPlays,
-      // With the spin stopped, the background is the loop unless the model's
-      // own animation already is.
-      isLoop: spin.still && !scene.animationMs, stopped: spin.stopped,
+  for (const { key, ms } of animatedLayers()) {
+    if (!ms) continue;
+    const ids = SYNC_NOTES[key];
+    $(ids.note).textContent = syncText({
+      animationMs: ms, checked: $(ids.box).checked,
+      scale: spin[ids.scale], plays: spin[ids.plays],
+      isLoop: spin.still && spin.leader === key, stopped: spin.stopped, turns: spin.turns,
     });
   }
 }
@@ -715,7 +803,7 @@ function startPump() {
 let playing = false;
 let playEpoch = 0;
 let shownIndex = -1;
-const cycle = { angles: [], times: [], backdropTimes: [], starts: [], totalMs: 0 };
+const cycle = { angles: [], times: [], backdropTimes: [], foregroundTimes: [], starts: [], totalMs: 0 };
 
 function rebuildCycle() {
   const spin = readSpin();
@@ -724,6 +812,7 @@ function rebuildCycle() {
   const times = frameTimesMs(spin.frames, spin.rps);
   cycle.times = times.map((t) => t * spin.animScale);
   cycle.backdropTimes = times.map((t) => t * spin.backdropScale);
+  cycle.foregroundTimes = times.map((t) => t * spin.foregroundScale);
   // GIF's grid, the same one #loop-info quotes: the coarsest of the formats,
   // and the only one whose quantisation is visible as judder.
   const { starts, totalMs } = frameStarts(frameDelaysMs(spin.frames, spin.rps, 'gif'));
@@ -758,6 +847,7 @@ function advancePlayback(now) {
   scene.setAngle(...cycle.angles[index]);
   scene.setTime(cycle.times[index]);
   showBackdropFrame(cycle.backdropTimes[index]);
+  paintForeground(cycle.foregroundTimes[index]);
   return true;
 }
 
@@ -780,6 +870,7 @@ function stopPlayback({ rewind = true } = {}) {
   // settings change would snap to anyway.
   if (rewind && scene.model) { scene.setAngle(0); scene.setTime(0); scene.render(); }
   showBackdropFrame(0);
+  paintForeground(0);
 }
 
 /*
@@ -870,10 +961,12 @@ function schedulePreview() {
       scene.setAngle(...cycle.angles[shownIndex]);
       scene.setTime(cycle.times[shownIndex]);
       showBackdropFrame(cycle.backdropTimes[shownIndex]);
+      paintForeground(cycle.foregroundTimes[shownIndex]);
     } else {
       scene.setAngle(0);
       scene.setTime(0);
       showBackdropFrame(0);
+      paintForeground(0);
     }
     scene.render();
     recordTextureFit();
@@ -1521,7 +1614,7 @@ const STYLE_BY_MODE = {
 let lastTextMode = $('text-mode').value;
 
 function rememberTextStyle() {
-  if (lastTextMode === 'off') return;
+  if (lastTextMode === 'off' || lastTextMode === 'image') return;
   STYLE_BY_MODE[lastTextMode] = { font: $('text-font').value, size: $('text-size').value };
 }
 $('text-font').addEventListener('change', rememberTextStyle);
@@ -1531,7 +1624,8 @@ $('text-mode').addEventListener('change', async () => {
   const mode = $('text-mode').value;
   $('text-blocks').hidden = mode !== 'front' && mode !== 'behind';
   $('text-band').hidden = mode !== 'ontop';
-  $('text-style').hidden = mode === 'off';
+  $('text-image').hidden = mode !== 'image';
+  $('text-style').hidden = mode === 'off' || mode === 'image';
   $('text-stroke-row').hidden = mode === 'ontop';
 
   const style = STYLE_BY_MODE[mode];
@@ -1543,7 +1637,8 @@ $('text-mode').addEventListener('change', async () => {
   lastTextMode = mode;
 
   discardStore();
-  drawPreviewCaption();
+  // A foreground animation joins or leaves the loop with this switch.
+  applyAndPreview();
   // The remembered font may not have been fetched yet, and until it is the
   // caption is measured from a fallback and sized wrong. Draw again once it
   // has arrived, exactly as picking a font by hand does.
@@ -1603,6 +1698,7 @@ const TEXT_RANGE = {
   'env-intensity': [0, 100], exposure: [0.01, 100], brightness: [0, 1000],
   'normal-strength': [0, 100], 'emission-strength': [0, 1000],
   'background-size': [0, 1000],
+  'fg-size': [0, 1000],
 };
 
 /** Each slider's own range, captured before anything widens it. */
@@ -1755,7 +1851,7 @@ for (const id of RANGE_IDS) {
   $(id).addEventListener('change', () => normaliseRange(id));
 }
 for (const id of ['up-axis', 'direction', 'quality', 'background', 'background-mode',
-  'width', 'height', 'tumble-dir', 'tumble-ratio', 'roll-dir', 'roll-ratio', 'sync-anim', 'bg-sync']) {
+  'width', 'height', 'tumble-dir', 'tumble-ratio', 'roll-dir', 'roll-ratio', 'sync-anim', 'bg-sync', 'fg-sync']) {
   $(id).addEventListener('input', () => { discardStore(); applyAndPreview(); });
 }
 
@@ -1778,25 +1874,22 @@ const PICTURE_TYPES = new Map([['image/jpeg', 'jpg'], ['image/png', 'png'],
 const PICTURE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif']);
 
 /**
- * Decode a chosen picture and make it the background.
+ * Decode a picture chosen for the background or the foreground.
  *
  * Decoded up front, once, into ImageBitmaps — every frame of an animated GIF
  * or WebP, by the same decoder a picture model uses (src/image-model.js):
  * every exported frame draws one, and a picture that will not decode is
- * better reported now than discovered halfway through a render. The previous
- * picture is kept until the new one has proved itself.
+ * better reported now than discovered halfway through a render.
  *
- * The preview's <img> animates by itself, at the picture's own speed, and so
- * does the export: frame i shows whatever the animation shows at frame i's
- * moment in the loop.
+ * Returns `{ bitmap, frames, animation, url, name, title }`, or null with
+ * the reason written into `nameEl`. An animated picture's `animation` is
+ * `{ frames, starts, totalMs }` and its bitmap is the first frame.
  */
-async function chooseBackdropPicture(file) {
-  if (!file) return;
-  const name = $('background-name');
+async function decodeLayerPicture(file, nameEl) {
   const ext = PICTURE_EXTENSIONS.has(extOf(file.name)) ? extOf(file.name) : PICTURE_TYPES.get(file.type);
   if (!ext) {
-    name.textContent = `${file.name} is not a JPEG, PNG, WebP, BMP or GIF`;
-    return;
+    nameEl.textContent = `${file.name} is not a JPEG, PNG, WebP, BMP or GIF`;
+    return null;
   }
   let decoded;
   setBusy(`Loading ${file.name}…`);
@@ -1806,14 +1899,10 @@ async function chooseBackdropPicture(file) {
       onProgress: (done, total) => setBusy(`Loading ${file.name}… frame ${done} of ${total}`),
     });
   } catch {
-    name.textContent = `Could not read ${file.name}`;
-    return;
+    nameEl.textContent = `Could not read ${file.name}`;
+    return null;
   } finally {
     setBusy('');
-  }
-  if (backdropPicture) {
-    for (const frame of backdropPicture.frames) frame.close();
-    URL.revokeObjectURL(backdropPicture.url);
   }
   const { frames, delays } = decoded;
   let animation = null;
@@ -1823,9 +1912,31 @@ async function chooseBackdropPicture(file) {
     for (const delay of delays) { starts.push(totalMs); totalMs += delay; }
     animation = { frames, starts, totalMs };
   }
-  backdropPicture = {
-    bitmap: frames[0], frames, animation, url: URL.createObjectURL(file), name: file.name,
+  const title = `${file.name} · ${decoded.sourceWidth} × ${decoded.sourceHeight}`
+    + (animation ? ` · ${frames.length} frames · ${(animation.totalMs / 1000).toFixed(2)} s` : '');
+  return {
+    bitmap: frames[0], frames, animation, url: URL.createObjectURL(file), name: file.name, title,
   };
+}
+
+function freeLayerPicture(picture) {
+  if (!picture) return;
+  for (const frame of picture.frames) frame.close();
+  URL.revokeObjectURL(picture.url);
+}
+
+/**
+ * Make a chosen picture the background. The previous picture is kept until
+ * the new one has proved itself.
+ */
+async function chooseBackdropPicture(file) {
+  if (!file) return;
+  const name = $('background-name');
+  const picture = await decodeLayerPicture(file, name);
+  if (!picture) return;
+  freeLayerPicture(backdropPicture);
+  backdropPicture = picture;
+  const { animation, frames } = picture;
   $('backdrop-image').src = backdropPicture.url;
   $('backdrop-image').hidden = !!animation;
   $('backdrop-frames').hidden = !animation;
@@ -1838,11 +1949,33 @@ async function chooseBackdropPicture(file) {
     showBackdropFrame(0);
   }
   name.textContent = file.name;
-  name.title = `${file.name} · ${decoded.sourceWidth} × ${decoded.sourceHeight}`
-    + (animation ? ` · ${frames.length} frames · ${(animation.totalMs / 1000).toFixed(2)} s` : '');
+  name.title = picture.title;
   discardStore();
   applyAndPreview();
 }
+
+/** Make a chosen picture the foreground, as the background does. */
+async function chooseForegroundPicture(file) {
+  if (!file) return;
+  const name = $('fg-name');
+  const picture = await decodeLayerPicture(file, name);
+  if (!picture) return;
+  freeLayerPicture(foregroundPicture);
+  foregroundPicture = picture;
+  $('row-fg-sync').hidden = !picture.animation;
+  $('fg-sync-note').hidden = !picture.animation;
+  foregroundPreviewMs = 0;
+  name.textContent = file.name;
+  name.title = picture.title;
+  discardStore();
+  applyAndPreview();
+}
+
+$('fg-browse').addEventListener('click', () => $('fg-file').click());
+$('fg-file').addEventListener('change', (e) => {
+  chooseForegroundPicture(e.target.files[0]);
+  e.target.value = '';
+});
 
 $('background-browse').addEventListener('click', () => $('background-file').click());
 $('background-file').addEventListener('change', (e) => {
@@ -2313,7 +2446,7 @@ $('render').addEventListener('click', async () => {
       setProgress(done, total);
       $('store-info').textContent = `Rendering frame ${done} of ${total}…`;
       return !cancelRequested;
-    }, caption, readBackdrop());
+    }, caption, readBackdrop(), readForeground());
 
     if (!result) {
       $('store-info').textContent = 'Cancelled.';

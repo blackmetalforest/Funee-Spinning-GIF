@@ -163,16 +163,26 @@ The animation runs at its own speed, whatever the spin speed is:
   frame rate × the animation's length, so it loops exactly, and the card holds
   still facing you.
 - **While spinning**, the loop is the spin's. **Sync** (under the model's
-  **Advanced**, shown only for an animated picture, on by default) changes
-  the animation's speed as little as it can so that a whole number of plays
-  fills the loop exactly, and the exported GIF loops without a jump. A 4 s
-  animation on a 2 s spin plays once at double speed; a 0.22 s one on a 3 s
-  spin plays 14 times at 0.214 s each. The loop is the *whole* loop — with a
-  3:1 tumble it is three spins long, and the animation is fitted to all
-  three. A line under the checkbox says how many plays and at what speed.
-  With Sync off the animation keeps its own speed and jumps back to its
-  start wherever the loop restarts. Fitting 15 frames across 20 output frames
-  shows some unevenly; that is expected.
+  **Advanced**, shown only for an animated picture, on by default) makes the
+  two fit, so the exported GIF loops without a jump:
+  - An animation **shorter** than the loop plays a whole number of times in
+    it, sped up or slowed down as little as possible: a 0.22 s one on a 3 s
+    spin plays 14 times at 0.214 s each.
+  - An animation **longer** than the loop makes the loop longer instead, by
+    whole spins, to the number nearest the animation's length — then nudges
+    the animation to fit exactly. A 2.94 s GIF on a 2 s spin gets a loop of
+    two spins and plays once in it at 74% speed; a 16.67 s one gets eight
+    spins at 104%. The frame count grows to match, and the Frames line says
+    `(Sync)` when that has happened.
+
+  "Nearest" is measured as a ratio, because that is how a speed change is
+  felt: running 26% slow is a smaller change than running 47% fast, even
+  though 2.94 s is closer to 2 s than to 4 s. The loop is the *whole* loop —
+  with a 3:1 tumble it is three spins long, and it grows in steps of three.
+  A line under the checkbox says how many plays and at what speed. With Sync
+  off the animation keeps its own speed, the loop its own length, and the
+  animation jumps back to its start wherever the loop restarts. Fitting 15
+  frames across 20 output frames shows some unevenly; that is expected.
 
 Frame delays are read as written, so the common "60 fps" GIF whose delays run
 20, 20, 10 ms plays at 60 fps. Only a missing or zero delay is read as 100 ms,
@@ -603,13 +613,11 @@ Preview is off.
 
 The background has its own **Sync** checkbox, shown under the position
 sliders only for an animated picture and on by default. It works exactly like
-the model's (see [Pictures](#pictures)): the animation's speed changes as
-little as it can so that a whole number of plays fills the whole loop, and a
-line under the checkbox says how many and at what speed. The model and the
-background are fitted separately, each to the same loop. With the spin
-stopped, the loop is the model's animation if it has one — the background is
-fitted to that — and otherwise the background's own, which then plays once at
-its own speed.
+the model's (see [Pictures](#pictures)): a short animation plays a whole
+number of times in the loop, a long one lengthens the loop by whole spins,
+and a line under the checkbox says how many plays and at what speed. How it
+works with an animated model and foreground too is under
+[Syncing several animations](#syncing-several-animations).
 
 A picture is fitted to the image's **height** at 100%, so a wide photo on a
 square image loses its left and right sides and a tall one leaves clear strips
@@ -840,6 +848,40 @@ behind by whatever was missed. A single rendering loop serves both the spin and
 the centre-axis fade, and draws only when something actually changed — at 1 fps
 that is one draw per second, and a 1-frame still draws once and then stops.
 
+## Syncing several animations
+
+The model, the background and the Foreground Image can each be an animated
+picture, each with its own **Sync** checkbox. However many there are, the rule
+is the same two steps:
+
+1. **Find the loop.** It is the spin's loop, every extra axis included. If the
+   longest *synced* animation is longer than that, the loop is lengthened by
+   whole spins to the number nearest that animation's length.
+2. **Fit each synced animation to the loop, separately.** Each plays a whole
+   number of times per loop — the nearest whole number — at whatever small
+   change of speed that needs.
+
+Because every animation only has to fit the loop, never each other, there is
+always an answer, and every synced layer loops without a jump. What cannot be
+had in general is every animation at exactly its own speed: a 0.48 s GIF and a
+0.65 s GIF have no reasonable common length. So each is nudged instead, and the
+line under each checkbox shows by how much. The nudge is largest when an
+animation fits between one and two times into the loop — up to about 40% in the
+worst case — and within a few percent once it plays several times per loop.
+
+With the spin stopped, the loop is the longest synced animation, played once at
+its own speed, and the others are fitted to it. With Sync off, a layer plays at
+its own speed from the start of the loop and jumps back wherever the loop
+restarts; an unsynced animation never lengthens the loop.
+
+These rules were checked against real exports. For combinations of the test
+GIFs — one to three animated layers, Sync on and off, spin speeds from stopped
+to 5 r/s, frame rates of 12 to 50, tumble and roll together, loops of up to 33
+spins and one held to the 1,000-frame cap — every exported frame of the
+background and foreground was matched against the source animations, and the
+model's own animation at every frame where it faces the camera square on. All
+showed the frame the rules call for.
+
 ## Text
 
 A **Text** section captions the animation. The Mode dropdown decides *where*
@@ -852,6 +894,14 @@ picture you asked for and nothing else.
 | **In Front** | top / centre / bottom boxes drawn over the render |
 | **On Top** | one caption in a white band grown *above* the image |
 | **Behind** | the same three boxes as In Front, composited *under* the render |
+| **Foreground Image** | a picture over the render instead of text |
+
+**Foreground Image** has the background picture's controls and abilities:
+JPEG, PNG, WebP, BMP or GIF, transparency kept, **Size**, **Up / down** and
+**Left / right** placed by the same rule (100% fits the image's height), and an
+animated GIF or WebP plays in the preview and the export with its own **Sync**
+checkbox. It is drawn over the model and everything else, and is never part
+of On Top's band.
 
 In Front and Behind share one set of controls — Font, Stroke weight, Size, and
 the three boxes — and differ only in what is drawn over what. Text is always

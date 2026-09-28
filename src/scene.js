@@ -24,6 +24,7 @@ import {
   applyLayers, layersOf, debugMaterial, applyFiltering, LAYERS,
 } from './materials.js';
 import { Environments } from './environment.js';
+import { frameIndexAt } from './encoders/timing.js';
 
 export const UP_AXES = ['Y', 'Z', 'X'];
 
@@ -941,14 +942,8 @@ export class SpinScene {
     let changed = false;
     for (const texture of this.animations ?? []) {
       const anim = texture.userData.animation;
-      const t = ((ms % anim.totalMs) + anim.totalMs) % anim.totalMs;
-      // Last frame starting at or before t.
-      let lo = 0;
-      let hi = anim.starts.length - 1;
-      while (lo < hi) {
-        const mid = (lo + hi + 1) >> 1;
-        if (anim.starts[mid] <= t) lo = mid; else hi = mid - 1;
-      }
+      // The same lookup the background and foreground pictures use.
+      const lo = frameIndexAt(anim.starts, anim.totalMs, ms);
       if (lo === anim.index) continue;
       anim.index = lo;
       texture.image = anim.frames[lo];

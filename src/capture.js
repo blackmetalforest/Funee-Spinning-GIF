@@ -43,7 +43,7 @@ import { drawBackdrop } from './backdrop.js';
  * height keep describing the render, and nothing upstream of here learns that
  * the band exists.
  */
-function makeResolver(width, height, caption, backdrop) {
+function makeResolver(width, height, caption, backdrop, foreground = null) {
   const mode = caption?.mode ?? null;
   const out = new OffscreenCanvas(width, height);
   const ctx = out.getContext('2d', { willReadFrequently: true });
@@ -58,19 +58,19 @@ function makeResolver(width, height, caption, backdrop) {
   const total = height + band;
   if (band) out.height = total;
 
-  // An animated background picture shows the frame for this moment of the loop.
-  const backdropAt = (ms) => {
-    const animation = backdrop?.animation;
-    if (!animation) return backdrop;
+  // An animated picture shows the frame for this moment of its own clock.
+  const pictureAt = (layer, ms) => {
+    const animation = layer?.animation;
+    if (!animation) return layer;
     const index = frameIndexAt(animation.starts, animation.totalMs, ms);
-    return { ...backdrop, image: animation.frames[index] };
+    return { ...layer, image: animation.frames[index] };
   };
 
-  const resolve = (source, ms = 0) => {
+  const resolve = (source, backdropMs = 0, foregroundMs = 0) => {
     ctx.clearRect(0, 0, width, total);
     // Only when the user asked for one: left clear otherwise, so the alpha
     // channel still tells the exporters the truth about what is see-through.
-    drawBackdrop(ctx, backdropAt(ms), { width, height, top: band, total });
+    drawBackdrop(ctx, pictureAt(backdrop, backdropMs), { width, height, top: band, total });
     // The caption goes on *after* the downsample, at the true output size, so
     // its edges stay sharp instead of being softened along with the render.
     // Here rather than at save time because it belongs to the frame: one
@@ -83,6 +83,9 @@ function makeResolver(width, height, caption, backdrop) {
       if (mode === 'ontop') drawBand(ctx, caption.band, { ...caption, width, height, y: 0 });
       else if (mode === 'front') drawText(ctx, caption.text, { ...caption, width, height });
     }
+    // Foreground Image: Text's picture mode, placed and drawn exactly as the
+    // background is, but over the render. It never has a band to allow for.
+    if (foreground) drawBackdrop(ctx, pictureAt(foreground, foregroundMs), { width, height, top: band, total });
     return ctx.getImageData(0, 0, width, total);
   };
   // The composed height travels with the composer: it is the store's height,
@@ -102,13 +105,16 @@ function makeResolver(width, height, caption, backdrop) {
  *          x:number, y:number, animation?:{frames, starts, totalMs}}} [backdrop]
  *   the background layer; see drawBackdrop(). Null leaves the frame clear.
  *   With `animation`, each frame draws the picture showing at that moment.
+ * @param {null | {image, size, x, y, animation?}} [foreground] Text's
+ *   Foreground Image: the same shape as a picture backdrop, drawn over the
+ *   render instead of under it.
  * @returns {Promise<{blobs: Blob[], width: number, height: number} | null>}
  *   `height` is the height of the finished image, which "On Top" makes taller
  *   than the render. Every exporter reads it from here rather than from the
  *   settings, so the band needs no special case downstream.
  */
 export async function captureFrames(scene, spin, onProgress, caption = null,
-  backdrop = null) {
+  backdrop = null, foreground = null) {
   const { width, height } = scene.settings;
   // [spin, tumble, roll] per frame; see framePoses().
   const poses = framePoses(spin.frames, spin);
@@ -117,8 +123,9 @@ export async function captureFrames(scene, spin, onProgress, caption = null,
   const times = frameTimesMs(spin.frames, spin.rps);
   const modelScale = spin.animScale ?? 1;
   const backdropScale = spin.backdropScale ?? 1;
+  const foregroundScale = spin.foregroundScale ?? 1;
   // The renderer no longer paints the background, so the composer does.
-  const { resolve, height: outHeight } = makeResolver(width, height, caption, backdrop);
+  const { resolve, height: outHeight } = makeResolver(width, height, caption, backdrop, foreground);
   const blobs = [];
 
   // The centre-axis guide is a preview aid and must never reach the output.
@@ -133,7 +140,7 @@ export async function captureFrames(scene, spin, onProgress, caption = null,
       scene.render();
 
       // PNG keeps the frame store lossless; see the note at the top of the file.
-      const png = encodePng(resolve(scene.canvas, times[i] * backdropScale));
+      const png = encodePng(resolve(scene.canvas, times[i] * backdropScale, times[i] * foregroundScale));
       blobs.push(new Blob([png], { type: 'image/png' }));
 
       if (onProgress && onProgress(i + 1, poses.length) === false) return null;

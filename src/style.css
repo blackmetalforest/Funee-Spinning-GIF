@@ -677,7 +677,9 @@ details.more[open] > summary { margin-bottom: 8px; }
 }
 #text-band textarea { min-height: calc(3em + 12px); }
 #text-blocks[hidden], #text-band[hidden], #text-style[hidden],
-#text-stroke-row[hidden] { display: none; }
+#text-stroke-row[hidden], #text-image[hidden], #row-fg-sync[hidden],
+#fg-sync-note[hidden] { display: none; }
+#fg-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #tumble-ratio-row[hidden], #roll-ratio-row[hidden] { display: none; }
 
 #replacers[hidden] { display: none; }

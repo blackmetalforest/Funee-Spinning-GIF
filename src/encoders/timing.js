@@ -85,6 +85,9 @@ export function frameStarts(delays) {
   return { starts, totalMs: elapsed };
 }
 
+/** How close to a frame's start still counts as reaching it; see frameIndexAt(). */
+const FRAME_EDGE_MS = 1e-6;
+
 /**
  * Which frame is on screen `t` ms into the loop.
  *
@@ -98,7 +101,10 @@ export function frameStarts(delays) {
 export function frameIndexAt(starts, totalMs, t) {
   if (!starts.length) return 0;
   if (!(totalMs > 0)) return 0;
-  let time = t % totalMs;
+  // A hair of tolerance: a time computed to land exactly on a frame's start
+  // (5/60 of a 2 s loop at 96% speed is 160 ms, where a 20 ms frame begins)
+  // can come out a rounding error short, and should still pick that frame.
+  let time = (t + FRAME_EDGE_MS) % totalMs;
   if (time < 0) time += totalMs;                 // negative elapsed, just in case
   // Binary search for the last frame starting at or before `time`.
   let lo = 0;
@@ -194,18 +200,44 @@ export function frameTimesMs(nFrames, rps) {
 }
 
 /**
- * Sync: how fast to play an animated picture so a whole number of its plays
- * fills one loop exactly — the whole loop, extra axes and all, which is what
- * `loopMs` is. The number of plays is the nearest whole number, at least
- * one, so the speed changes as little as it can: a 4 s animation on a 2 s
- * spin plays once at double speed, and a 0.22 s one on a 3 s spin plays 14
- * times, each 0.2143 s.
+ * The whole number nearest `x` *as a ratio*, at least one: between n and n+1
+ * the split is at their geometric mean, not n + 0.5. For a speed that is the
+ * honest meaning of "nearest" — 1.47× too slow and 1.36× too fast are not
+ * equally far apart, however the arithmetic looks.
+ */
+export function nearestWhole(x) {
+  if (!(x > 1)) return 1;
+  const n = Math.floor(x);
+  return x / n <= (n + 1) / x ? n : n + 1;
+}
+
+/**
+ * Sync, first half: how many loops of the spin an animated picture needs.
+ *
+ * An animation longer than one loop would have to be sped up to fit it, a
+ * 3 s GIF on a 1 s spin three times over. Instead the loop is lengthened to
+ * the whole number of loops nearest the animation's length — three spins,
+ * there — and the animation then only needs the small nudge syncScale()
+ * gives it. `loopMs` is the whole loop, extra axes included, so every loop
+ * added is still a closed one. An animation no longer than a loop needs one.
+ */
+export function syncLoops(loopMs, animationMs) {
+  if (!(loopMs > 0) || !(animationMs > loopMs)) return 1;
+  return nearestWhole(animationMs / loopMs);
+}
+
+/**
+ * Sync, second half: how fast to play an animated picture so a whole number
+ * of its plays fills the loop exactly — the whole loop, extra axes and any
+ * loops syncLoops() added, which is what `loopMs` is. The number of plays is
+ * the nearest whole number, at least one, so the speed changes as little as
+ * it can: a 0.22 s animation on a 3 s loop plays 14 times, each 0.2143 s.
  *
  * Returns the factor that turns loop time into animation time, and the
  * number of plays. With nothing to fit, the factor is 1.
  */
 export function syncScale(loopMs, animationMs) {
   if (!(loopMs > 0) || !(animationMs > 0)) return { scale: 1, plays: 0 };
-  const plays = Math.max(1, Math.round(loopMs / animationMs));
+  const plays = nearestWhole(loopMs / animationMs);
   return { scale: (plays * animationMs) / loopMs, plays };
 }
