@@ -734,7 +734,9 @@ function setProgress(done, total) {
   $('progress').style.width = `${(done / total) * 100}%`;
 }
 
+let saveReady = false;
 function setSaveEnabled(enabled) {
+  saveReady = enabled;
   // A format this browser cannot make stays off whatever the store says.
   document.querySelectorAll('.save').forEach((b) => {
     b.disabled = !enabled || b.dataset.unsupported === 'true';
@@ -2486,70 +2488,30 @@ $('cancel').addEventListener('click', () => { cancelRequested = true; });
 /* --------------------------------------------------------------- saving */
 
 document.querySelectorAll('.save').forEach((button) => {
-  button.addEventListener('click', () => saveAs(button.dataset.format));
+  button.addEventListener('click', () => {
+    if ($('copy-mode').checked) copyAs(button.dataset.format);
+    else saveAs(button.dataset.format);
+  });
+});
+
+$('copy-mode').addEventListener('change', () => {
+  const verb = $('copy-mode').checked ? 'Copy' : 'Save';
+  document.querySelectorAll('.save').forEach((b) => {
+    b.textContent = b.textContent.replace(/^(Save|Copy)/, verb);
+  });
+  setSaveEnabled(saveReady);
 });
 
 async function saveAs(format) {
   if (!store) return;
-  const spin = readSpin();
-  const loopWord = spin.still ? 'loop' : spin.turns > 1 ? `loop of ${spin.turns} spins` : 'turn';
-  const settings = readSettings();
   setBusy(`Building ${FORMAT_LABELS[format]}…`);
   setSaveEnabled(false);
 
   try {
-    let blob;
-    let extension = format;
-    let note = '';
-
-    if (format === 'gif') {
-      const frames = await decodeFrames(store);
-      const rgb = hexToRgb(settings.background);
-      const { blob: gifBlob, info } = encodeGif(frames, {
-        rps: spin.rps,
-        transparent: settings.transparent,
-        background: rgb,
-        dither: $('dither').checked,
-      });
-      blob = gifBlob;
-      note = `${info.totalMs} ms per ${loopWord}`;
-    } else if (format === 'webp') {
-      const frames = await decodeFrames(store);
-      const info = loopSummary(frames.length, spin.rps, 'webp');
-      const stills = [];
-      for (let i = 0; i < frames.length; i++) {
-        stills.push({
-          data: await encodeStill(frames[i], { quality: 0.9 }),
-          duration: info.delays[i],
-        });
-      }
-      blob = new Blob([muxAnimation(stills, {
-        width: store.width, height: store.height, loop: 0,
-      })], { type: 'image/webp' });
-      note = `${info.totalMs} ms per ${loopWord}`;
-    } else if (format === 'apng') {
-      // No decode and no re-encode: the store is already PNG.
-      const info = loopSummary(store.blobs.length, spin.rps, 'apng');
-      const frames = [];
-      for (let i = 0; i < store.blobs.length; i++) {
-        frames.push({
-          data: new Uint8Array(await store.blobs[i].arrayBuffer()),
-          delay: info.delays[i],
-        });
-      }
-      blob = new Blob([muxApng(frames, {
-        width: store.width, height: store.height, loop: 0,
-      })], { type: 'image/apng' });
-      extension = 'png';
-      note = `${info.totalMs} ms per ${loopWord} · lossless`;
-    } else if (format === 'zip') {
-      blob = await encodeZip(store, { name: `${modelName}_frames` });
-      note = `${store.blobs.length} PNG frames`;
-    }
-
-    download(blob, `${modelName}_spin.${extension}`);
+    const { blob, filename, note } = await buildFile(format);
+    download(blob, filename);
     $('save-info').textContent =
-      `Saved ${modelName}_spin.${extension} — ${(blob.size / 1024).toFixed(0)} KB` +
+      `Saved ${filename} — ${(blob.size / 1024).toFixed(0)} KB` +
       (note ? ` · ${note}` : '');
   } catch (err) {
     console.error(err);
@@ -2558,6 +2520,120 @@ async function saveAs(format) {
     setBusy('');
     setSaveEnabled(true);
   }
+}
+
+/** The finished file for one Save button, with a line about its timing. */
+async function buildFile(format) {
+  const spin = readSpin();
+  const loopWord = spin.still ? 'loop' : spin.turns > 1 ? `loop of ${spin.turns} spins` : 'turn';
+  const settings = readSettings();
+  let blob;
+  let extension = format;
+  let note = '';
+
+  if (format === 'gif') {
+    const frames = await decodeFrames(store);
+    const rgb = hexToRgb(settings.background);
+    const { blob: gifBlob, info } = encodeGif(frames, {
+      rps: spin.rps,
+      transparent: settings.transparent,
+      background: rgb,
+      dither: $('dither').checked,
+    });
+    blob = gifBlob;
+    note = `${info.totalMs} ms per ${loopWord}`;
+  } else if (format === 'webp') {
+    const frames = await decodeFrames(store);
+    const info = loopSummary(frames.length, spin.rps, 'webp');
+    const stills = [];
+    for (let i = 0; i < frames.length; i++) {
+      stills.push({
+        data: await encodeStill(frames[i], { quality: 0.9 }),
+        duration: info.delays[i],
+      });
+    }
+    blob = new Blob([muxAnimation(stills, {
+      width: store.width, height: store.height, loop: 0,
+    })], { type: 'image/webp' });
+    note = `${info.totalMs} ms per ${loopWord}`;
+  } else if (format === 'apng') {
+    // No decode and no re-encode: the store is already PNG.
+    const info = loopSummary(store.blobs.length, spin.rps, 'apng');
+    const frames = [];
+    for (let i = 0; i < store.blobs.length; i++) {
+      frames.push({
+        data: new Uint8Array(await store.blobs[i].arrayBuffer()),
+        delay: info.delays[i],
+      });
+    }
+    blob = new Blob([muxApng(frames, {
+      width: store.width, height: store.height, loop: 0,
+    })], { type: 'image/apng' });
+    extension = 'png';
+    note = `${info.totalMs} ms per ${loopWord} · lossless`;
+  } else if (format === 'zip') {
+    blob = await encodeZip(store, { name: `${modelName}_frames` });
+    note = `${store.blobs.length} PNG frames`;
+  }
+
+  return { blob, filename: `${modelName}_spin.${extension}`, note };
+}
+
+/*
+ * Copying. Each file goes on the clipboard as itself, under its own type,
+ * with no second copy in another format. Browsers only accept a few types
+ * there (image/png everywhere); Chromium also takes any type as a "web
+ * custom format", which keeps the bytes exactly but is labelled so that only
+ * programs asking for it by that name see it. So a type the browser refuses
+ * outright goes as its custom format where there is one, and otherwise the
+ * browser's refusal is shown as it is.
+ *
+ * The clipboard must be written straight from the click, and building the
+ * file can take a while, so the item is handed over at once holding a
+ * promise that settles when the file is ready.
+ */
+const CLIPBOARD_TYPES = {
+  gif: 'image/gif', webp: 'image/webp', apng: 'image/png', zip: 'application/zip',
+};
+
+function clipboardType(format) {
+  const type = CLIPBOARD_TYPES[format];
+  if (typeof ClipboardItem.supports !== 'function' || ClipboardItem.supports(type)) return type;
+  return ClipboardItem.supports(`web ${type}`) ? `web ${type}` : type;
+}
+
+function copyAs(format) {
+  if (!store || !CLIPBOARD_TYPES[format]) return;
+  if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
+    $('save-info').innerHTML = '<span class="warn">This browser cannot put files on the clipboard'
+      + (window.isSecureContext ? '.' : ' from a page that is not HTTPS or localhost.') + '</span>';
+    return;
+  }
+  const type = clipboardType(format);
+  setBusy(`Building ${FORMAT_LABELS[format]}…`);
+  setSaveEnabled(false);
+
+  const built = buildFile(format);
+  built.catch(() => {});   // reported through the clipboard's own promise
+  const item = new ClipboardItem({
+    [type]: built.then(({ blob }) => new Blob([blob], { type })),
+  });
+
+  navigator.clipboard.write([item])
+    .then(() => built)
+    .then(({ blob, filename }) => {
+      $('save-info').textContent =
+        `Copied ${filename} — ${(blob.size / 1024).toFixed(0)} KB · on the clipboard as ${type}`;
+    })
+    .catch((err) => {
+      console.error(err);
+      $('save-info').innerHTML =
+        `<span class="warn">Copy failed (${escapeHtml(type)}): ${escapeHtml(friendlyError(err))}</span>`;
+    })
+    .finally(() => {
+      setBusy('');
+      setSaveEnabled(true);
+    });
 }
 
 function download(blob, filename) {
