@@ -423,6 +423,9 @@ html, body {
 .canvas-size { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .canvas-size input[type="number"] { width: 72px; }
 .canvas-square { display: flex; align-items: center; gap: 6px; white-space: nowrap; cursor: pointer; }
+/* Output: Dither GIF's box with Lossless WebP beside it. */
+.output-checks { display: flex; align-items: center; gap: 18px; }
+.check-inline { display: flex; align-items: center; gap: 6px; white-space: nowrap; cursor: pointer; }
 #frames-note { font-style: italic; }
 /* The Image section shows only the rows for the chosen kind of background. */
 #image:not([data-background="solid"]) .bg-solid-only,

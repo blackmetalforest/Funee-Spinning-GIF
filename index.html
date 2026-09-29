@@ -563,11 +563,12 @@
       <div id="progress-wrap" hidden><div id="progress"></div></div>
       <p id="store-info" class="muted small">No frames rendered yet.</p>
       <div class="row"><label for="dither">Dither GIF</label>
-        <input type="checkbox" id="dither" checked
-               title="Floyd–Steinberg dithering. Trades a finer-grained, noisier image for smoother gradients across GIF's 256 colours. Affects the GIF export only."></div>
-      <div class="row"><label for="copy-mode">Copy instead</label>
-        <input type="checkbox" id="copy-mode"
-               title="The buttons below put the file on the clipboard instead of downloading it."></div>
+        <span class="output-checks">
+          <input type="checkbox" id="dither" checked
+                 title="Floyd–Steinberg dithering. Trades a finer-grained, noisier image for smoother gradients across GIF's 256 colours. Affects the GIF export only.">
+          <label class="check-inline"><input type="checkbox" id="webp-lossless"
+                 title="Every pixel exactly as rendered, like APNG, at the cost of a bigger file. Affects the WebP export only."> Lossless WebP</label>
+        </span></div>
       <div class="save-grid">
         <button class="save" data-format="gif" disabled>Save GIF</button>
         <button class="save" data-format="webp" disabled>Save WebP</button>
