@@ -48,8 +48,9 @@ Tip: change the Address → We Love Katamari
   brightness** slider; every individual light is still there underneath
 - Produces a **seamless loop** — frame *i* sits at exactly `i × 360/N` degrees,
   so the last frame steps into the first with no repeated pose
-- Can **tumble** and **roll** the model as it spins, at whole-number ratios
-  to the spin so the loop still closes
+- Spins about a **main axis** of your choice — up–down (Y), toward you (Z)
+  or left–right (X) — and can turn about the other two as it spins, at
+  whole-number ratios to the spin so the loop still closes
 - Takes a spin speed and a frame rate and works out the frame count for you,
   flagging it when that count gets expensive. Either one at zero is a stopped
   spin, which exports as a single still
@@ -178,7 +179,7 @@ The animation runs at its own speed, whatever the spin speed is:
   "Nearest" is measured as a ratio, because that is how a speed change is
   felt: running 26% slow is a smaller change than running 47% fast, even
   though 2.94 s is closer to 2 s than to 4 s. The loop is the *whole* loop —
-  with a 3:1 tumble it is three spins long, and it grows in steps of three.
+  with an extra axis at 3:1 it is three spins long, and it grows in steps of three.
   A line under the checkbox says how many plays and at what speed. With Sync
   off the animation keeps its own speed, the loop its own length, and the
   animation jumps back to its start wherever the loop restarts. Fitting 15
@@ -505,13 +506,30 @@ pure red, yellow and blue that otherwise paints the whole camera. And where a bu
 obvious derived variant (`_bake`, `_LOD3`, `collision`) is pushed down the
 ranking; choosing between the rest is what the Advanced panel is for.
 
-## Extra spin axes
+## Main axis and extra spin axes
 
-The Spin section's **Advanced** disclosure adds two more axes to turn about
-while the model spins: **Tumble**, head over heels about the left–right axis,
-and **Roll**, like a wheel about the axis pointing at you. Each is **Off** by
-default, or **Clockwise** or **Counter-clockwise** — Tumble as seen from the
-right, Roll as you see it. The spinning model is turned as a whole, so the two
+The Spin section's **Advanced** disclosure starts with **Main axis**, the axis
+the spin turns about:
+
+- **Y (up–down)**, the default: a turntable, as the app has always spun.
+- **Z (toward you)**: a wheel facing the camera.
+- **X (left–right)**: head over heels.
+
+These are world axes, fixed to the view. **Up axis** (in Position) is a
+separate thing and does not change: it still decides which way up the model
+stands before any of this turns it. **Direction** is as seen from the end of
+the main axis — from above for Y, from the camera for Z, from the right for X
+— and **Start rotation** is where the spin starts about the main axis, so with
+Z it tilts the picture and with X it tips the model toward or away from you.
+
+Below it are the other two axes, to turn about while the model spins: **X
+(left–right)**, head over heels; **Y (up–down)**, like a turntable; **Z (toward
+you)**, like a wheel. Whichever is the main axis is hidden, so there are always
+two. Each is **Off** by default, or **Clockwise** or **Counter-clockwise**, as
+seen from the right, from above and from the camera respectively. Each axis
+keeps its own setting when the main axis changes; the one that becomes the
+main axis is hidden and ignored until it is an extra axis again. The spinning
+model is turned as a whole, always in the order X, Y, Z, so the extra axes
 combine with the spin rather than replacing it.
 
 Each axis's speed slider snaps to a ratio of the spin speed, written *spin
@@ -531,12 +549,13 @@ spin speed × 3 spins", "10.00 s/loop of 3 spins" — and warn or cap as they
 would for any long loop. The poses come from `framePoses()` in
 [src/encoders/timing.js](src/encoders/timing.js); with both axes off, its spin
 angles are the old ones to the last bit, so an ordinary spin exports exactly
-as before.
+as before. A pose is `[spin, x, z, y]`: X and Z kept the places they had
+before Y could be an extra axis.
 
 A **floor shadow** normally sits right under the model, because turning about
-a vertical axis never changes a point's height. Tumble and Roll do, so while
-either is on the floor goes under the lowest point any frame can reach, and
-the model never passes through it.
+a vertical axis never changes a point's height. A main axis of X or Z does,
+and so does any extra axis, so then the floor goes under the lowest point any
+frame can reach, and the model never passes through it.
 
 ## Position
 
@@ -576,8 +595,9 @@ frame 0.
 **Up axis** heads the section: it corrects a model authored Z-up or X-up before
 any of the adjustments below it apply.
 
-**Show center axis** draws a red arrow along the rotation axis so you can see
-whether the model sits on it. It also flashes up on its own whenever a Position
+**Show center axis** draws an arrow along the rotation axis so you can see
+whether the model sits on it: red pointing up for a Y main axis, green
+pointing at the camera for Z, blue pointing right for X. It also flashes up on its own whenever a Position
 control moves — two seconds at full strength, then a two-second fade — so the
 reference is there exactly while it is being used and gone the rest of the time.
 The checkbox pins it on permanently and overrides the flash.
@@ -783,7 +803,8 @@ shadow — it is transparent everywhere the light reaches, so it works on a
 transparent export and sits correctly over any background. The floor goes
 under the model's lowest point, measured vertex by vertex; spinning about a
 vertical axis never changes a point's height, so it is placed once rather than
-chasing the spin. **Floor shadow** sets its darkness.
+chasing the spin. With a main axis of X or Z, or an extra axis on, it goes
+under the lowest point any frame can reach instead. **Floor shadow** sets its darkness.
 
 ### Layers & debug
 
@@ -896,7 +917,7 @@ restarts; an unsynced animation never lengthens the loop.
 
 These rules were checked against real exports. For combinations of the test
 GIFs — one to three animated layers, Sync on and off, spin speeds from stopped
-to 5 r/s, frame rates of 12 to 50, tumble and roll together, loops of up to 33
+to 5 r/s, frame rates of 12 to 50, two extra axes together, loops of up to 33
 spins and one held to the 1,000-frame cap — every exported frame of the
 background and foreground was matched against the source animations, and the
 model's own animation at every frame where it faces the camera square on. All

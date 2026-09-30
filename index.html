@@ -142,7 +142,8 @@
     <section class="group">
       <h2>Spin</h2>
       <div class="row"><label for="direction">Direction</label>
-        <select id="direction">
+        <select id="direction"
+                title="As seen from the end of the main axis: from above for Y, from the camera for Z, from the right for X.">
           <option value="cw" selected>Clockwise</option>
           <option value="ccw">Counter-clockwise</option>
         </select></div>
@@ -158,35 +159,54 @@
       <p id="loop-info" class="muted small">—</p>
 
       <!--
-        Two more axes, each turning at a whole-number ratio to the spin so the
-        loop still closes (see SPIN_RATIOS in src/encoders/timing.js). A speed
-        row is hidden while its axis is off.
+        The main axis the spin turns about, then the other two, each turning at
+        a whole-number ratio to the spin so the loop still closes (see
+        SPIN_RATIOS in src/encoders/timing.js). There is a row for each of X, Y
+        and Z; the main axis's own row is hidden, and a speed row is hidden
+        while its axis is off.
       -->
       <details class="more" id="spin-more">
         <summary>Advanced</summary>
-        <p class="muted small">Turn about two more axes while it spins. Speeds are
+        <div class="row"><label for="spin-axis">Main axis</label>
+          <select id="spin-axis"
+                  title="The axis the spin turns about. Up axis, in Position, still decides which way up the model stands.">
+            <option value="Y" selected>Y (up–down)</option>
+            <option value="Z">Z (toward you)</option>
+            <option value="X">X (left–right)</option>
+          </select></div>
+        <p class="muted small">Turn about the other two axes while it spins. Speeds are
           spin turns : this axis's turns, so 1:2 turns twice per spin, and 2:1
           once every two spins, which makes the loop two spins long.</p>
-        <div class="row"><label for="tumble-dir">Tumble</label>
-          <select id="tumble-dir"
+        <div class="row" id="spin-x-row"><label for="spin-x-dir">X (left–right)</label>
+          <select id="spin-x-dir"
                   title="Head over heels, about the left–right axis. Clockwise as seen from the right.">
             <option value="off" selected>Off</option>
             <option value="cw">Clockwise</option>
             <option value="ccw">Counter-clockwise</option>
           </select></div>
-        <div class="row" id="tumble-ratio-row" hidden><label for="tumble-ratio">Tumble speed</label>
-          <input type="range" id="tumble-ratio" min="0" max="8" step="1" value="4" list="spin-ratio-marks">
-          <output for="tumble-ratio" id="tumble-ratio-out">1:1</output></div>
-        <div class="row"><label for="roll-dir">Roll</label>
-          <select id="roll-dir"
+        <div class="row" id="spin-x-ratio-row" hidden><label for="spin-x-ratio">X speed</label>
+          <input type="range" id="spin-x-ratio" min="0" max="8" step="1" value="4" list="spin-ratio-marks">
+          <output for="spin-x-ratio" id="spin-x-ratio-out">1:1</output></div>
+        <div class="row" id="spin-y-row" hidden><label for="spin-y-dir">Y (up–down)</label>
+          <select id="spin-y-dir"
+                  title="Like a turntable, about the up–down axis. Clockwise as seen from above.">
+            <option value="off" selected>Off</option>
+            <option value="cw">Clockwise</option>
+            <option value="ccw">Counter-clockwise</option>
+          </select></div>
+        <div class="row" id="spin-y-ratio-row" hidden><label for="spin-y-ratio">Y speed</label>
+          <input type="range" id="spin-y-ratio" min="0" max="8" step="1" value="4" list="spin-ratio-marks">
+          <output for="spin-y-ratio" id="spin-y-ratio-out">1:1</output></div>
+        <div class="row" id="spin-z-row"><label for="spin-z-dir">Z (toward you)</label>
+          <select id="spin-z-dir"
                   title="Like a wheel, about the axis pointing at you. Clockwise as you see it.">
             <option value="off" selected>Off</option>
             <option value="cw">Clockwise</option>
             <option value="ccw">Counter-clockwise</option>
           </select></div>
-        <div class="row" id="roll-ratio-row" hidden><label for="roll-ratio">Roll speed</label>
-          <input type="range" id="roll-ratio" min="0" max="8" step="1" value="4" list="spin-ratio-marks">
-          <output for="roll-ratio" id="roll-ratio-out">1:1</output></div>
+        <div class="row" id="spin-z-ratio-row" hidden><label for="spin-z-ratio">Z speed</label>
+          <input type="range" id="spin-z-ratio" min="0" max="8" step="1" value="4" list="spin-ratio-marks">
+          <output for="spin-z-ratio" id="spin-z-ratio-out">1:1</output></div>
         <datalist id="spin-ratio-marks">
           <option value="0"></option><option value="1"></option><option value="2"></option>
           <option value="3"></option><option value="4"></option><option value="5"></option>
@@ -222,7 +242,7 @@
         </select></div>
       <p class="muted small">Moves the model around the rotation point. Most
         models need no adjustment.</p>
-      <div class="row"><label for="pos-x">X (Move Left)</label>
+      <div class="row"><label for="pos-x">X (Move Right)</label>
         <input type="range" id="pos-x" min="-2" max="2" step="0.01" value="0">
         <output for="pos-x" id="pos-x-out">0.00</output></div>
       <div class="row"><label for="pos-y">Y (Move Up)</label>

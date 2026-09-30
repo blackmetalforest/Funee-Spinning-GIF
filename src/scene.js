@@ -33,6 +33,18 @@ export const UP_AXES = ['Y', 'Z', 'X'];
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 const WORLD_X = new THREE.Vector3(1, 0, 0);
 const WORLD_Z = new THREE.Vector3(0, 0, 1);
+const WORLD_AXES = { X: WORLD_X, Y: WORLD_UP, Z: WORLD_Z };
+
+/*
+ * The centre-axis guide for each main axis: which way it points and its
+ * colour. Its cylinder and cone are built pointing up (+Y); the rotation
+ * turns them to point right (+X) or at the camera (+Z).
+ */
+const AXIS_GUIDES = {
+  Y: { color: 0xe02020, rotation: [0, 0, 0] },
+  Z: { color: 0x20b040, rotation: [Math.PI / 2, 0, 0] },
+  X: { color: 0x2f6fe8, rotation: [0, 0, -Math.PI / 2] },
+};
 /* The clear colour. Only its alpha of 0 matters — see render(). */
 const BLACK = new THREE.Color(0x000000);
 const scratch = new THREE.Vector3();
@@ -78,6 +90,9 @@ export const DEFAULT_SETTINGS = {
   elevation: 20,
   startAngle: 0,
   upAxis: 'Y',
+  // The axis the spin turns about, in world terms: 'Y' up–down, 'Z' toward the
+  // camera, 'X' left–right. Up axis above stands the model up first.
+  spinAxis: 'Y',
   // Position adjustments, applied around the rotation point. Translation is in
   // bounding-sphere radii (the model is normalised to radius 1), so 1.0 shifts
   // it by its own radius regardless of the model's real-world scale.
@@ -87,7 +102,7 @@ export const DEFAULT_SETTINGS = {
   pitch: 0,
   yaw: 0,
   roll: 0,
-  // Whether Tumble or Roll is on, which is all the floor needs to know.
+  // Whether an extra axis is turning, which is all the floor needs to know.
   tumbling: false,
   fov: 35,
   zoom: 1.0,
@@ -295,15 +310,15 @@ export class SpinScene {
   /**
    * Put the floor under the model's lowest point.
    *
-   * The spin is always about world Y, and turning about a vertical axis never
-   * changes a point's height, so the lowest point is the same at every frame
-   * and the floor can be placed once rather than chasing the spin.
+   * A spin about world Y (the default main axis) never changes a point's
+   * height, so the lowest point is the same at every frame and the floor can
+   * be placed once rather than chasing the spin.
    *
-   * Tumble and Roll do change heights. The floor then goes under the lowest
-   * point any frame can reach — the bottom of the sphere the model is
-   * normalised into, pushed out by the Position offset — so nothing ever
-   * passes through it, at the cost of a gap at frames where the model is
-   * upright.
+   * A spin about X or Z does change heights, and so do the extra axes. The
+   * floor then goes under the lowest point any frame can reach — the bottom of
+   * the sphere the model is normalised into, pushed out by the Position
+   * offset — so nothing ever passes through it, at the cost of a gap at
+   * frames where the model is upright.
    *
    * Measured precisely (vertex by vertex): a floor placed from the loose box
    * floats visibly below a model whose extremes are curved.
@@ -314,10 +329,10 @@ export class SpinScene {
     this.ground.visible = wanted;
     if (!wanted) return;
     const reach = Math.hypot(s.posX, s.posY, s.posZ);
-    const key = [s.upAxis, s.posX, s.posY, s.posZ, s.pitch, s.yaw, s.roll, s.tumbling].join();
+    const key = [s.upAxis, s.spinAxis, s.posX, s.posY, s.posZ, s.pitch, s.yaw, s.roll, s.tumbling].join();
     if (key !== this.groundKey) {
       this.groundKey = key;
-      if (s.tumbling) {
+      if (s.tumbling || s.spinAxis !== 'Y') {
         this.groundY = -(1 + reach);
       } else {
         this.pivot.updateMatrixWorld(true);
@@ -331,7 +346,8 @@ export class SpinScene {
   }
 
   /**
-   * A red arrow marking the rotation axis.
+   * An arrow marking the rotation axis: red pointing up for a spin about Y,
+   * green pointing at the camera for Z, blue pointing right for X.
    *
    * Built from a cylinder plus a cone rather than three.js's ArrowHelper,
    * which draws a one-pixel line for the shaft. MeshBasicMaterial keeps it
@@ -339,8 +355,9 @@ export class SpinScene {
    *
    * It is a sibling of the pivot, not a child, so it stays put while the model
    * turns around it — that is what makes it useful for judging whether the
-   * model actually sits on the axis. setAngle() always spins about world Y
-   * regardless of the up-axis setting, so world Y is the axis to mark.
+   * model actually sits on the axis. setAngle() spins about the main world
+   * axis regardless of the up-axis setting, so that world axis is the one to
+   * mark.
    */
   buildAxisArrow() {
     const material = new THREE.MeshBasicMaterial({ color: 0xe02020 });
@@ -402,9 +419,18 @@ export class SpinScene {
   sizeAxisArrow() {
     if (!this.model) return;
 
+    const axis = AXIS_GUIDES[this.settings.spinAxis] ? this.settings.spinAxis : 'Y';
+    this.arrowAxis = axis;
+    this.axisShaft.material.color.setHex(AXIS_GUIDES[axis].color);
+    this.axisArrow.rotation.set(...AXIS_GUIDES[axis].rotation);
+
     this.model.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(this.model);
     if (box.isEmpty()) return;
+    if (axis !== 'Y') {
+      this.sizeSideArrow(box, axis);
+      return;
+    }
 
     const height = Math.max(1e-3, box.max.y - box.min.y);
     const pad = Math.max(0.02, height * 0.05);
@@ -429,6 +455,43 @@ export class SpinScene {
     this.axisShaft.scale.set(shaftRadius, shaftLength, shaftRadius);
     this.axisShaft.position.set(0, base + shaftLength / 2, 0);
 
+    this.axisHead.scale.set(shaftRadius * 3, headLength, shaftRadius * 3);
+    this.axisHead.position.set(0, tip - headLength / 2, 0);
+  }
+
+  /**
+   * The arrow along X or Z. The same idea as the up arrow above, measured
+   * along its own axis, with two differences.
+   *
+   * It is sized from the model's largest side rather than its extent along
+   * the axis, because a model can be all but flat along X or Z — a picture is
+   * a card with no depth at all — and an arrow sized to that would be a speck.
+   * For the same reason it always reaches a little way out on both sides.
+   *
+   * Its limits differ too. Pointing right, the frame's half-width is the
+   * edge. Pointing at the camera, the edge is the near plane, which
+   * updateCamera() keeps 1.05 radii in front of the rotation point: past that
+   * the tip would be sliced off, so it stops just short.
+   */
+  sizeSideArrow(box, axis) {
+    const key = axis.toLowerCase();
+    const size = box.getSize(new THREE.Vector3());
+    const extent = Math.max(1e-3, size.x, size.y, size.z);
+    const pad = Math.max(0.02, extent * 0.05);
+    const headLength = Math.max(0.06, extent * 0.12);
+    const shaftRadius = Math.max(0.005, extent * 0.006);
+    const least = extent * 0.25;
+
+    const half = this.frameHalfHeight || 1;
+    const limit = axis === 'X' ? half * (this.settings.width / this.settings.height) * 0.95
+      : Math.min(1, half * 0.95);
+    let base = Math.max(Math.min(box.min[key] - pad, -least), -limit);
+    let tip = Math.min(Math.max(box.max[key] + pad, least) + headLength, limit);
+    if (tip - base < headLength * 1.5) base = tip - headLength * 1.5;
+    const shaftLength = Math.max(1e-3, tip - base - headLength);
+
+    this.axisShaft.scale.set(shaftRadius, shaftLength, shaftRadius);
+    this.axisShaft.position.set(0, base + shaftLength / 2, 0);
     this.axisHead.scale.set(shaftRadius * 3, headLength, shaftRadius * 3);
     this.axisHead.position.set(0, tip - headLength / 2, 0);
   }
@@ -816,6 +879,9 @@ export class SpinScene {
 
     this.resize();
     this.placeGround();
+    // The arrow is measured once per model, and again only when it has to
+    // point along a different axis.
+    if (this.model && this.arrowAxis !== s.spinAxis) this.sizeAxisArrow();
   }
 
   /**
@@ -954,23 +1020,29 @@ export class SpinScene {
   }
 
   /**
-   * Point the model at a given spin angle, in degrees, and optionally a tumble
-   * (about world X, left–right) and a roll (about world Z, toward the
-   * viewer) on top of it — the Spin section's extra axes.
+   * Point the model at a given spin angle, in degrees, about the main axis,
+   * and optionally turn it about the other world axes on top of that — the
+   * Spin section's extra axes. The arguments are a pose from framePoses():
+   * spin, then X, Z and Y. Only the two that are not the main axis are ever
+   * non-zero.
    */
-  setAngle(degrees, tumble = 0, roll = 0) {
+  setAngle(degrees, x = 0, z = 0, y = 0) {
     const total = THREE.MathUtils.degToRad(this.settings.startAngle + degrees);
     // Rebuild from scratch each time: apply the up-axis correction, then spin
-    // about world Y. Accumulating rotations here would drift over a long loop.
+    // about the main axis. Accumulating rotations here would drift over a
+    // long loop.
     const s = this.settings;
     this.pivot.rotation.set(0, 0, 0);
     if (s.upAxis === 'Z') this.pivot.rotateX(-Math.PI / 2);
     else if (s.upAxis === 'X') this.pivot.rotateZ(Math.PI / 2);
-    this.pivot.rotateOnWorldAxis(WORLD_UP, total);
-    // The spinning model is then turned as a whole. Every angle is back on a
-    // whole turn at the end of the loop, so the loop closes whatever the order.
-    if (tumble) this.pivot.rotateOnWorldAxis(WORLD_X, THREE.MathUtils.degToRad(tumble));
-    if (roll) this.pivot.rotateOnWorldAxis(WORLD_Z, THREE.MathUtils.degToRad(roll));
+    this.pivot.rotateOnWorldAxis(WORLD_AXES[s.spinAxis] ?? WORLD_UP, total);
+    // The spinning model is then turned as a whole, always in the order X, Y,
+    // Z, so a spin about Y comes out exactly as it did before there was a
+    // choice. Every angle is back on a whole turn at the end of the loop, so
+    // the loop closes whatever the order.
+    if (x) this.pivot.rotateOnWorldAxis(WORLD_X, THREE.MathUtils.degToRad(x));
+    if (y) this.pivot.rotateOnWorldAxis(WORLD_UP, THREE.MathUtils.degToRad(y));
+    if (z) this.pivot.rotateOnWorldAxis(WORLD_Z, THREE.MathUtils.degToRad(z));
   }
 
   /**

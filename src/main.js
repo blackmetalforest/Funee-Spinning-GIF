@@ -76,6 +76,7 @@ function readSettings() {
     elevation: +$('elevation').value,
     startAngle: +$('start').value,
     upAxis: $('up-axis').value,
+    spinAxis: $('spin-axis').value,
     posX: +$('pos-x').value,
     posY: +$('pos-y').value,
     posZ: +$('pos-z').value,
@@ -160,15 +161,19 @@ function framesFor(fps, rps) {
   };
 }
 
-/** The Spin section's extra axes, as their direction and speed controls say. */
-const EXTRA_AXES = [
-  { axis: 'x', dir: 'tumble-dir', ratio: 'tumble-ratio' },
-  { axis: 'z', dir: 'roll-dir', ratio: 'roll-ratio' },
-];
+/**
+ * The Spin section's extra axes, as their direction and speed controls say.
+ * Each of X, Y and Z has its own controls, and the main axis's are hidden and
+ * ignored — so switching the main axis keeps what each axis was set to.
+ */
+const EXTRA_AXES = ['x', 'y', 'z'].map((axis) => ({
+  axis, row: `spin-${axis}-row`, dir: `spin-${axis}-dir`, ratio: `spin-${axis}-ratio`,
+}));
 
 function readExtraAxes() {
+  const main = $('spin-axis').value.toLowerCase();
   return EXTRA_AXES
-    .filter(({ dir }) => $(dir).value !== 'off')
+    .filter(({ axis, dir }) => axis !== main && $(dir).value !== 'off')
     .map(({ axis, dir, ratio }) => {
       const { main, spins } = SPIN_RATIOS[clampInt($(ratio).value, 0, SPIN_RATIOS.length - 1, 4)];
       return { axis, main, spins, clockwise: $(dir).value === 'cw' };
@@ -598,9 +603,11 @@ function syncOutputs() {
     $(`${id}-out`).textContent = trim(+$(id).value);
   }
   $('shininess-out').textContent = $('shininess').value;
-  for (const { dir, ratio } of EXTRA_AXES) {
+  const mainAxis = $('spin-axis').value.toLowerCase();
+  for (const { axis, row, dir, ratio } of EXTRA_AXES) {
     $(`${ratio}-out`).textContent = SPIN_RATIOS[+$(ratio).value]?.label ?? '';
-    $(`${ratio}-row`).hidden = $(dir).value === 'off';
+    $(row).hidden = axis === mainAxis;
+    $(`${ratio}-row`).hidden = axis === mainAxis || $(dir).value === 'off';
   }
   $('brightness-out').textContent = `${$('brightness').value}%`;
   for (const id of ['env-rotation', 'key-azimuth', 'key-height', 'fill-azimuth', 'fill-height']) {
@@ -1853,7 +1860,8 @@ for (const id of RANGE_IDS) {
   $(id).addEventListener('change', () => normaliseRange(id));
 }
 for (const id of ['up-axis', 'direction', 'quality', 'background', 'background-mode',
-  'width', 'height', 'tumble-dir', 'tumble-ratio', 'roll-dir', 'roll-ratio', 'sync-anim', 'bg-sync', 'fg-sync']) {
+  'width', 'height', 'spin-axis', 'spin-x-dir', 'spin-x-ratio', 'spin-y-dir', 'spin-y-ratio',
+  'spin-z-dir', 'spin-z-ratio', 'sync-anim', 'bg-sync', 'fg-sync']) {
   $(id).addEventListener('input', () => { discardStore(); applyAndPreview(); });
 }
 

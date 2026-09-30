@@ -699,7 +699,7 @@ details.more[open] > summary { margin-bottom: 8px; }
 #text-stroke-row[hidden], #fg-rows[hidden], #row-fg-sync[hidden],
 #fg-sync-note[hidden] { display: none; }
 #fg-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#tumble-ratio-row[hidden], #roll-ratio-row[hidden] { display: none; }
+#spin-more .row[hidden] { display: none; }
 
 #replacers[hidden] { display: none; }
 /*

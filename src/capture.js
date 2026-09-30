@@ -121,7 +121,7 @@ function makeResolver(width, height, caption, backdrop, foreground = null) {
 export async function captureFrames(scene, spin, onProgress, caption = null,
   backdrop = null, foreground = null) {
   const { width, height } = scene.settings;
-  // [spin, tumble, roll] per frame; see framePoses().
+  // [spin, x, z, y] per frame; see framePoses().
   const poses = framePoses(spin.frames, spin);
   // Where the loop is at each frame. An animated model and an animated
   // background each play against it at their own Sync's speed.

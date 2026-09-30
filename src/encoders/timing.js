@@ -126,8 +126,8 @@ export function frameAngles(nFrames, clockwise = true, start = 0) {
 }
 
 /*
- * Two extra axes to turn about while the model spins: Tumble, about the
- * left–right axis, and Roll, about the axis pointing at the viewer.
+ * Extra axes to turn about while the model spins: whichever two of X
+ * (left–right), Y (up–down) and Z (toward the viewer) the spin is not about.
  *
  * Each runs at a fixed ratio to the main spin, written main turns : this
  * axis's turns. A free speed would almost never come back to where it started
@@ -163,24 +163,31 @@ export function loopTurns(axes = []) {
 }
 
 /**
- * The pose of every frame, as [spin, tumble, roll] in degrees.
+ * Where each extra axis's angle sits in a pose. X and Z keep the places they
+ * had when they were the only two (Tumble and Roll); Y, which only turns as
+ * an extra axis when the spin is about X or Z, comes after them.
+ */
+export const POSE_INDEX = { x: 1, z: 2, y: 3 };
+
+/**
+ * The pose of every frame, as [spin, x, z, y] in degrees (see POSE_INDEX).
  *
- * `turns` is loopTurns() for `axes`; each axis is { axis: 'x' | 'z', main,
- * spins, clockwise }. With no extra axes the spin angles are frameAngles()'s
- * to the last bit — the step is computed the same way — so adding the axes
- * changes nothing about an ordinary spin's export.
+ * `turns` is loopTurns() for `axes`; each axis is { axis: 'x' | 'y' | 'z',
+ * main, spins, clockwise }. With no extra axes the spin angles are
+ * frameAngles()'s to the last bit — the step is computed the same way — so
+ * adding the axes changes nothing about an ordinary spin's export.
  */
 export function framePoses(nFrames, { clockwise = true, turns = 1, axes = [] } = {}) {
   const n = Math.max(1, Math.floor(nFrames));
   const step = (360 * turns) / n;
   const sign = clockwise ? -1 : 1;
   const extra = axes.map(({ axis, main, spins, clockwise: cw }) => ({
-    index: axis === 'x' ? 1 : 2,
+    index: POSE_INDEX[axis],
     step: (360 * turns * spins) / main / n,
     sign: cw ? -1 : 1,
   }));
   return Array.from({ length: n }, (_, i) => {
-    const pose = [0 + sign * step * i, 0, 0];     // 0 + as frameAngles(): no -0
+    const pose = [0 + sign * step * i, 0, 0, 0];  // 0 + as frameAngles(): no -0
     for (const e of extra) pose[e.index] = 0 + e.sign * e.step * i;
     return pose;
   });
