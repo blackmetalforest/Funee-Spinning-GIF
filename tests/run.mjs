@@ -14,7 +14,7 @@ import vm from 'vm';
 
 import { frameDelaysMs, loopSummary, frameAngles, roundHalfToEven,
          frameStarts, frameIndexAt, SPIN_RATIOS, loopTurns,
-         framePoses, frameTimesMs, syncScale } from '../src/encoders/timing.js';
+         framePoses, frameTimesMs, syncScale, syncLoops, nearestWhole } from '../src/encoders/timing.js';
 import { playableDelays, PICTURE_MODEL_EXTENSIONS } from '../src/image-model.js';
 import { MODEL_EXTENSIONS } from '../src/archive.js';
 import { muxAnimation } from '../src/encoders/webp.js';
@@ -90,9 +90,19 @@ console.log('\npictures as models');
   check('all five picture formats open', ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif']
     .every((ext) => PICTURE_MODEL_EXTENSIONS.includes(ext)));
   {
-    // The two examples Sync was specified with.
+    // The examples Sync was specified with.
+    check('sync: a 4 s GIF on a 2 s spin makes the loop two spins',
+      syncLoops(2000, 4000) === 2 && syncScale(4000, 4000).scale === 1);
+    check('sync: a GIF no longer than the loop keeps one loop',
+      syncLoops(3000, 220) === 1 && syncLoops(2000, 2000) === 1);
+    check('sync: 2.94 s on a 2 s spin takes two spins (a 26% nudge, not 47%)',
+      syncLoops(2000, 2940) === 2);
+    check('sync: 2.4 s on a 2 s spin stays one spin', syncLoops(2000, 2400) === 1);
+    check('sync: a 16.67 s GIF on a 2 s spin takes eight', syncLoops(2000, 16670) === 8);
+    check('nearest whole is by ratio', nearestWhole(1.47) === 2 && nearestWhole(1.4) === 1
+      && nearestWhole(0.3) === 1 && nearestWhole(13.636) === 14);
     const a = syncScale(2000, 4000);
-    check('sync: a 4 s GIF on a 2 s spin plays once at double speed',
+    check('sync alone: a 4 s GIF in a 2 s loop plays once at double speed',
       a.plays === 1 && Math.abs(a.scale - 2) < 1e-12);
     const b = syncScale(3000, 220);
     check('sync: a 0.22 s GIF on a 3 s spin plays 14 times, 0.2143 s each',
@@ -114,11 +124,13 @@ console.log('\npictures as models');
 
 console.log('\nextra spin axes');
 {
-  check('nine ratios, 5:1 to 1:5, 1:1 in the middle',
-    SPIN_RATIOS.length === 9 && SPIN_RATIOS[0].label === '5:1'
-    && SPIN_RATIOS[4].label === '1:1' && SPIN_RATIOS[8].label === '1:5');
-  check('never more than 5 to 1 either way',
-    SPIN_RATIOS.every(({ main, spins }) => Math.max(main, spins) <= 5 && Math.min(main, spins) === 1));
+  check('nineteen ratios, 10:1 to 1:10, 1:1 in the middle',
+    SPIN_RATIOS.length === 19 && SPIN_RATIOS[0].label === '10:1'
+    && SPIN_RATIOS[9].label === '1:1' && SPIN_RATIOS[18].label === '1:10');
+  check('never more than 10 to 1 either way',
+    SPIN_RATIOS.every(({ main, spins }) => Math.max(main, spins) <= 10 && Math.min(main, spins) === 1));
+  check('9:1 with 10:1 needs ninety',
+    loopTurns([SPIN_RATIOS[1], SPIN_RATIOS[0]]) === 90);
   const r = (label) => SPIN_RATIOS.find((x) => x.label === label);
   check('no extra axes: one spin per loop', loopTurns([]) === 1);
   check('faster axes never lengthen the loop', loopTurns([r('1:5'), r('1:3')]) === 1);
@@ -163,6 +175,20 @@ console.log('\nextra spin axes');
   check('roll stays still while only tumble is on', p.every((q) => q[2] === 0));
   check('counter-clockwise flips an extra axis',
     framePoses(4, { axes: [{ axis: 'z', ...r('1:1'), clockwise: false }] })[1][2] > 0);
+
+  // Main axis X or Z: Y becomes an extra axis, in the pose's fourth place,
+  // and X and Z keep theirs, so an existing Y-spin pose is unchanged.
+  const yPoses = framePoses(20, { clockwise: true, turns: 1,
+    axes: [{ axis: 'y', ...r('1:3'), clockwise: true }, { axis: 'z', ...r('1:1'), clockwise: false }] });
+  check('a Y extra axis lands in the fourth place', yPoses.every((q) => q.length === 4 && q[1] === 0));
+  check('a Y extra axis turns at its ratio', Math.abs(yPoses[1][3] - 3 * yPoses[1][0]) < 1e-9);
+  check('Z keeps its place beside a Y axis', yPoses[1][2] > 0);
+  const yTurns = loopTurns([{ axis: 'y', ...r('3:1') }]);
+  const yLoop = framePoses(30 * yTurns, { clockwise: false, turns: yTurns,
+    axes: [{ axis: 'y', ...r('3:1'), clockwise: true }] });
+  const yNext = yLoop[yLoop.length - 1][3] + (yLoop[1][3] - yLoop[0][3]);
+  check('3:1 on Y closes after three spins',
+    yTurns === 3 && Math.abs(yNext / 360 - Math.round(yNext / 360)) < 1e-9);
 }
 
 console.log('\nplayback lookup');

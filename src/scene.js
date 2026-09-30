@@ -87,7 +87,7 @@ export const DEFAULT_SETTINGS = {
   width: 480,
   height: 480,
   supersample: 1,          // MSAA handles most of it; 2-3 for extra smoothing
-  elevation: 20,
+  elevation: 15,
   // The camera's way round the model, in degrees. Positive shows the model as
   // a turn to the left (counter-clockwise from above) would, which is how
   // dragging the preview sideways has always moved it.

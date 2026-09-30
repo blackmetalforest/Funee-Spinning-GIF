@@ -167,14 +167,14 @@
       -->
       <details class="more" id="spin-more">
         <summary>Advanced</summary>
-        <div class="row"><label for="spin-axis">Main axis</label>
+        <div class="row"><label for="spin-axis">Main spin axis</label>
           <select id="spin-axis"
                   title="The axis the spin turns about. Up axis, in Position, still decides which way up the model stands.">
-            <option value="Y" selected>Y (up–down)</option>
-            <option value="Z">Z (toward you)</option>
-            <option value="X">X (left–right)</option>
+            <option value="Y" selected>Y (Turntable)</option>
+            <option value="Z">Z (Wheel)</option>
+            <option value="X">X (Tumble)</option>
           </select></div>
-        <div class="row" id="spin-x-row"><label for="spin-x-dir">X (left–right)</label>
+        <div class="row" id="spin-x-row"><label for="spin-x-dir">X (Tumble)</label>
           <select id="spin-x-dir"
                   title="Head over heels, about the left–right axis. Clockwise as seen from the right.">
             <option value="off" selected>Off</option>
@@ -184,7 +184,7 @@
         <div class="row" id="spin-x-ratio-row" hidden><label for="spin-x-ratio">X speed</label>
           <input type="range" id="spin-x-ratio" min="0" max="18" step="1" value="9" list="spin-ratio-marks">
           <output for="spin-x-ratio" id="spin-x-ratio-out">1:1</output></div>
-        <div class="row" id="spin-y-row" hidden><label for="spin-y-dir">Y (up–down)</label>
+        <div class="row" id="spin-y-row" hidden><label for="spin-y-dir">Y (Turntable)</label>
           <select id="spin-y-dir"
                   title="Like a turntable, about the up–down axis. Clockwise as seen from above.">
             <option value="off" selected>Off</option>
@@ -194,7 +194,7 @@
         <div class="row" id="spin-y-ratio-row" hidden><label for="spin-y-ratio">Y speed</label>
           <input type="range" id="spin-y-ratio" min="0" max="18" step="1" value="9" list="spin-ratio-marks">
           <output for="spin-y-ratio" id="spin-y-ratio-out">1:1</output></div>
-        <div class="row" id="spin-z-row"><label for="spin-z-dir">Z (toward you)</label>
+        <div class="row" id="spin-z-row"><label for="spin-z-dir">Z (Wheel)</label>
           <select id="spin-z-dir"
                   title="Like a wheel, about the axis pointing at you. Clockwise as you see it.">
             <option value="off" selected>Off</option>
@@ -213,6 +213,10 @@
           <option value="15"></option><option value="16"></option><option value="17"></option>
           <option value="18"></option>
         </datalist>
+        <div class="row"><label for="start">Start angle</label>
+          <input type="range" id="start" min="0" max="359" step="1" value="0"
+                 title="Where the spin starts, turned about the main axis: which pose is the first frame.">
+          <output for="start" id="start-out">0°</output></div>
       </details>
     </section>
 
@@ -221,20 +225,17 @@
       <!--
         The camera, moving around the model: up and down, and all the way
         round. Dragging the preview moves both. Neither turns the model, so the
-        spin keeps its axis however it is looked at.
+        spin keeps its axis however it is looked at. Where the spin starts is
+        Start angle, at the end of Spin's Advanced section.
       -->
       <div class="row"><label for="elevation">View up–down</label>
-        <input type="range" id="elevation" min="-90" max="90" step="1" value="20"
+        <input type="range" id="elevation" min="-90" max="90" step="1" value="15"
                title="Look from above (up to 90°) or below (down to −90°). Drag the preview up and down to change it.">
-        <output for="elevation" id="elevation-out">20°</output></div>
+        <output for="elevation" id="elevation-out">15°</output></div>
       <div class="row"><label for="azimuth">View left–right</label>
         <input type="range" id="azimuth" min="-180" max="180" step="1" value="0"
                title="Walk round the model, up to 180° either way, to see it from any side. Drag the preview sideways to change it.">
         <output for="azimuth" id="azimuth-out">0°</output></div>
-      <div class="row"><label for="start">Start angle</label>
-        <input type="range" id="start" min="0" max="359" step="1" value="0"
-               title="Where the spin starts, turned about the main axis: which pose is the first frame.">
-        <output for="start" id="start-out">0°</output></div>
       <div class="row"><label for="fov">Field of view</label>
         <input type="range" id="fov" min="10" max="150" step="1" value="35">
         <output for="fov" id="fov-out">35°</output></div>

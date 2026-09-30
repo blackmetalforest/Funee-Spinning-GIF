@@ -506,27 +506,26 @@ pure red, yellow and blue that otherwise paints the whole camera. And where a bu
 obvious derived variant (`_bake`, `_LOD3`, `collision`) is pushed down the
 ranking; choosing between the rest is what the Advanced panel is for.
 
-## Main axis and extra spin axes
+## Main spin axis and extra spin axes
 
-The Spin section's **Advanced** disclosure starts with **Main axis**, the axis
-the spin turns about:
+The Spin section's **Advanced** disclosure starts with **Main spin axis**, the
+axis the spin turns about:
 
-- **Y (up–down)**, the default: a turntable, as the app has always spun.
-- **Z (toward you)**: a wheel facing the camera.
-- **X (left–right)**: head over heels.
+- **Y (Turntable)**, the default: up–down, as the app has always spun.
+- **Z (Wheel)**: toward you, a wheel facing the camera.
+- **X (Tumble)**: left–right, head over heels.
 
 These are world axes, named as they look from the default view. **View
 left–right** walks the camera round them without turning them, so from 90° a Z
 spin is seen edge-on. **Up axis** (in Position) is a separate thing and does
 not change: it still decides which way up the model stands before any of this
 turns it. **Direction** is as seen from the end of the main axis — from above
-for Y, from the front for Z, from the right for X — and **Start angle** (in
-View) is where the spin starts about the main axis, so with Z it tilts the
+for Y, from the front for Z, from the right for X — and **Start angle**, the
+last row of the section, is where the spin starts about the main axis, so with Z it tilts the
 picture and with X it tips the model toward or away from you.
 
-Below it are the other two axes, to turn about while the model spins: **X
-(left–right)**, head over heels; **Y (up–down)**, like a turntable; **Z (toward
-you)**, like a wheel. Whichever is the main axis is hidden, so there are always
+Below it are the other two axes, to turn about while the model spins, under
+the same names: **X (Tumble)**, **Y (Turntable)** and **Z (Wheel)**. Whichever is the main axis is hidden, so there are always
 two. Each is **Off** by default, or **Clockwise** or **Counter-clockwise**, as
 seen from the right, from above and from the camera respectively. Each axis
 keeps its own setting when the main axis changes; the one that becomes the
@@ -571,8 +570,8 @@ Translation is in **bounding-sphere radii**: the model is normalised to radius 1
 on load, so 1.0 shifts it by its own radius whatever its real-world scale.
 Rotations apply in YXZ order (yaw, then pitch, then roll).
 
-Dragging a rotation slider — Pitch, Yaw, Roll, or View's up–down, left–right
-and Start angle —
+Dragging a rotation slider — Pitch, Yaw, Roll, View's up–down and left–right,
+or Spin's Start angle —
 catches on 90° anywhere from 88° to 92° (and the same below zero). The arrow
 keys and a typed value are exact, so 89° is still easy to set.
 
@@ -856,11 +855,12 @@ app always has; off, each material is drawn as its file says.
 ## Preview
 
 The **View** section places the camera. **View up–down** looks from above or
-below, from 90° to −90°; **View left–right** walks round the model, 180°
+below, from 90° to −90°, and starts at 15°; **View left–right** walks round the model, 180°
 either way, so every side can be seen. Both move the camera, not the model:
 the spin keeps its axis, its direction and its first frame, and the lights
-come round with the camera as they always have. **Start angle** below them is
-the spin's first frame, turned about the main axis.
+come round with the camera as they always have. **Start angle**, at the end of
+Spin's Advanced section, is the spin's first frame, turned about the main
+axis.
 
 With a model loaded, **dragging** the render view orbits it — sideways is View
 left–right, wrapping round past 180° so a drag can keep going, and up and down

@@ -2020,7 +2020,6 @@ $('preset').addEventListener('change', () => {
 $('reset-view').addEventListener('click', () => {
   setSliderValue('elevation', DEFAULT_SETTINGS.elevation);
   setSliderValue('azimuth', DEFAULT_SETTINGS.azimuth);
-  setSliderValue('start', DEFAULT_SETTINGS.startAngle);
   $('up-axis').value = DEFAULT_SETTINGS.upAxis;
   setSliderValue('fov', DEFAULT_SETTINGS.fov);
   setSliderValue('zoom', DEFAULT_SETTINGS.zoom);
