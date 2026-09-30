@@ -887,8 +887,8 @@ normally 60 Hz — so playback is driven from that delay table against
   the spin slowing down, so rotation speed and loop length stay correct and only
   smoothness suffers. The rate beside the checkbox is what was actually
   achieved, not what was asked for. (Past 50 fps a GIF will not play at the
-  requested rate in most viewers either — hence the red warning on the loop
-  summary — so a preview bounded by the display is closer to the truth.)
+  requested rate in most viewers either, so a preview bounded by the display
+  is closer to the truth.)
 - **Frame changes land on a vsync boundary**, up to ~16.7 ms from the exact
   delay. That is inherent to animation in a browser and applies to real GIF
   playback too.

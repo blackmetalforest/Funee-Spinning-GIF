@@ -16,7 +16,7 @@ import { drawText, drawBand, layoutBand, isBlank } from './overlay-text.js';
 import { placeBackdrop, drawBackdrop } from './backdrop.js';
 import { PRESETS, PRESET_KEYS, presetValues, matchingPreset } from './presets.js';
 import { captureFrames, decodeFrames, storeSize } from './capture.js';
-import { loopSummary, FPS_LIMIT, frameDelaysMs, frameStarts, frameIndexAt,
+import { loopSummary, frameDelaysMs, frameStarts, frameIndexAt,
          SPIN_RATIOS, loopTurns, framePoses, frameTimesMs, syncScale,
          syncLoops } from './encoders/timing.js';
 import { decodePicture } from './image-model.js';
@@ -699,9 +699,7 @@ function updateLoopInfo() {
   const info = loopSummary(spin.frames, spin.rps, 'gif');
   const fps = info.fps.toFixed(1);
   const seconds = (info.totalMs / 1000).toFixed(2);
-  const fpsHtml = info.fps > FPS_LIMIT
-    ? `<span class="warn">${fps} fps</span>`
-    : `${fps} fps`;
+  const fpsHtml = `${fps} fps`;
   const plural = spin.frames === 1 ? 'frame' : 'frames';
   // A loop of several spins is quoted as a loop, with the spin rate still
   // per turn, since that is what the Spin speed slider sets.
