@@ -147,7 +147,7 @@ be. It loads with Retro lighting and the **Flat** preset, which shows it at
 exactly its own colours, and with **Texture filtering → Sharp (anisotropic)**:
 a picture turned nearly edge-on otherwise goes soft, because the GPU samples a
 smaller copy of the texture there to avoid shimmer. Every other setting still
-works on it, and **Reset to defaults** goes back to these two. Neither is
+works on it, and **Reset** (beside the Rendering title) goes back to these two. Neither is
 undone when a 3D model is loaded next.
 
 **Transparency.** A PNG, WebP or GIF's alpha is read the same way a game rip's
@@ -535,7 +535,7 @@ main axis is hidden and ignored until it is an extra axis again. The spinning
 model is turned as a whole, always in the order X, Y, Z, so the extra axes
 combine with the spin rather than replacing it.
 
-**Reset to defaults** at the bottom of Spin puts every Spin control back as
+**Reset**, beside the Spin title, puts every Spin control back as
 the page starts — Direction, speed, frame rate and everything under Advanced,
 Start angle included — and flashes the arrow if that changes the main axis.
 
@@ -697,7 +697,7 @@ four things until you ask for more:
 4. Two disclosures, **Advanced lighting** and **Layers & debug**, which hold
    every individual control.
 
-**Reset to defaults** under them puts all of it back, including the Lighting
+**Reset**, beside the Rendering title, puts all of it back, including the Lighting
 the model picked.
 
 ### Realistic and Retro
@@ -857,6 +857,13 @@ adds anisotropic filtering for surfaces seen at a glancing angle, or
 **Pixelated**, which samples the nearest texel — an 8×8 console texture drawn
 as eight clear blocks. **Double-sided** draws the back of every face, as the
 app always has; off, each material is drawn as its file says.
+
+## Finding your way round the panel
+
+Each section's title is large and bright, with a blue bar beside it, so the
+sections stand apart in a long panel. Spin, View, Position and Rendering each
+have a small **↺ Reset** at the right of their title, which puts just that
+section back to how the page starts.
 
 ## Preview
 

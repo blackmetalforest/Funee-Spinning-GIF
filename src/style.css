@@ -401,13 +401,50 @@ html, body {
   /* On touch layouts this reserves the scroll-safe strip on the right. */
   padding-right: calc(12px + var(--gutter));
 }
+/*
+ * Section titles: bright, larger, and marked with an accent bar, so each
+ * section is easy to find in a long panel. A section with a reset puts it on
+ * the title's line, at the right, as a small pill rather than a full-width
+ * button of its own.
+ */
 .group h2 {
-  margin: 0 0 10px;
-  font-size: 12px;
-  letter-spacing: 0.08em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--text);
 }
+.group h2::before {
+  content: "";
+  width: 4px;
+  height: 1.05em;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 12px;
+}
+.group-head h2 { margin: 0; }
+button.reset {
+  min-height: 0;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+button.reset:hover:not(:disabled) { color: var(--text); }
+/* A finger needs more to aim at than a mouse does. */
+@media (pointer: coarse) { button.reset { padding: 7px 14px; } }
 
 .row {
   display: grid;
@@ -615,7 +652,6 @@ details.more > summary {
 }
 details.more > summary:hover { color: var(--text); }
 details.more[open] > summary { margin-bottom: 8px; }
-#rendering .row.actions { margin-top: 10px; }
 
 /*
  * Each setting hides the controls that mean nothing under it: Phong's

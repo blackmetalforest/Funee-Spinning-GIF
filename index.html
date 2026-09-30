@@ -140,7 +140,8 @@
     </section>
 
     <section class="group">
-      <h2>Spin</h2>
+      <div class="group-head"><h2>Spin</h2>
+        <button type="button" class="reset" id="reset-spin" title="Reset Spin to defaults">↺ Reset</button></div>
       <div class="row"><label for="direction">Direction</label>
         <select id="direction"
                 title="As seen from the end of the main axis: from above for Y, from the front for Z, from the right for X.">
@@ -218,11 +219,11 @@
                  title="Where the spin starts, turned about the main axis: which pose is the first frame.">
           <output for="start" id="start-out">0°</output></div>
       </details>
-      <div class="row actions"><button id="reset-spin">Reset to defaults</button></div>
     </section>
 
     <section class="group">
-      <h2>View</h2>
+      <div class="group-head"><h2>View</h2>
+        <button type="button" class="reset" id="reset-view" title="Reset View to defaults">↺ Reset</button></div>
       <!--
         The camera, moving around the model: up and down, and all the way
         round. Dragging the preview moves both. Neither turns the model, so the
@@ -243,11 +244,11 @@
       <div class="row"><label for="zoom">Zoom</label>
         <input type="range" id="zoom" min="0.3" max="5" step="0.05" value="1">
         <output for="zoom" id="zoom-out">1.00×</output></div>
-      <div class="row actions"><button id="reset-view">Reset to defaults</button></div>
     </section>
 
     <section class="group">
-      <h2>Position</h2>
+      <div class="group-head"><h2>Position</h2>
+        <button type="button" class="reset" id="reset-position" title="Reset Position to defaults">↺ Reset</button></div>
       <div class="row"><label for="up-axis">Up axis</label>
         <select id="up-axis">
           <option value="Y" selected>Y (glTF, most apps)</option>
@@ -274,7 +275,6 @@
       <div class="row"><label for="roll">Roll (Left)</label>
         <input type="range" id="roll" min="-180" max="180" step="1" value="0">
         <output for="roll" id="roll-out">0°</output></div>
-      <div class="row actions"><button id="reset-position">Reset to defaults</button></div>
     </section>
 
     <section class="group" id="image" data-background="transparent">
@@ -366,7 +366,8 @@
     </section>
 
     <section class="group" id="rendering">
-      <h2>Rendering</h2>
+      <div class="group-head"><h2>Rendering</h2>
+        <button type="button" class="reset" id="reset-render" title="Reset Rendering to defaults">↺ Reset</button></div>
       <!--
         Realistic draws a model with its own physically based materials (glTF,
         USDZ); Retro is the Phong path every OBJ and Collada rip was tuned
@@ -522,7 +523,6 @@
           <input type="checkbox" id="double-sided" checked
                  title="Draw the back of every face. Off uses what the file says for each material, which hides faces seen from behind."></div>
       </details>
-      <div class="row actions"><button id="reset-render">Reset to defaults</button></div>
     </section>
 
     <section class="group">
