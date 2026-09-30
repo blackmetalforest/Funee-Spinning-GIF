@@ -1869,6 +1869,10 @@ for (const id of POSITION_IDS) {
   $(id).addEventListener('input', () => { discardStore(); flashAxis(); });
 }
 
+// A new main axis shows its arrow briefly, as a Position change does, so the
+// axis the model now turns about is on screen for a moment.
+$('spin-axis').addEventListener('input', flashAxis);
+
 for (const id of PICTURE_IDS) $(id).addEventListener('input', discardStore);
 
 /* ---------------------------------------------------------- background */
@@ -2025,6 +2029,24 @@ $('reset-view').addEventListener('click', () => {
   setSliderValue('zoom', DEFAULT_SETTINGS.zoom);
   discardStore();
   applyAndPreview();
+});
+
+/*
+ * Everything in the Spin section back to how the page starts, the Advanced
+ * rows included. The defaults are read from the page itself (each control's
+ * initial value), so they cannot drift from what a fresh load shows.
+ */
+$('reset-spin').addEventListener('click', () => {
+  const axisBefore = $('spin-axis').value;
+  for (const id of ['direction', 'spin-axis', 'spin-x-dir', 'spin-y-dir', 'spin-z-dir']) {
+    const select = $(id);
+    select.value = [...select.options].find((o) => o.defaultSelected)?.value ?? select.options[0].value;
+  }
+  for (const id of ['spin-x-ratio', 'spin-y-ratio', 'spin-z-ratio']) $(id).value = $(id).defaultValue;
+  for (const id of ['speed', 'fps', 'start']) setSliderValue(id, +$(id).defaultValue);
+  discardStore();
+  applyAndPreview();
+  if ($('spin-axis').value !== axisBefore) flashAxis();
 });
 
 $('reset-position').addEventListener('click', () => {

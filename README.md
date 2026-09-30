@@ -221,7 +221,9 @@ bundle loads without ever inflating the 14 MB `.blend` sitting next to the
 model.
 
 **Which model.** Where a bundle holds several, the format carrying the most
-material information wins — glTF and FBX over OBJ, OBJ over STL — then the one
+material information wins — glTF and FBX over OBJ, OBJ over STL — except that
+an OBJ goes ahead of a DAE, because in ripped bundles holding both it is the
+OBJ that loads properly. Then the one
 nearest the top, then the biggest. Files that are obviously not the deliverable
 (`_LOD3`, `collision`, `backup`) go to the back. The info line names what was
 chosen and how many models it chose from.
@@ -533,6 +535,10 @@ main axis is hidden and ignored until it is an extra axis again. The spinning
 model is turned as a whole, always in the order X, Y, Z, so the extra axes
 combine with the spin rather than replacing it.
 
+**Reset to defaults** at the bottom of Spin puts every Spin control back as
+the page starts — Direction, speed, frame rate and everything under Advanced,
+Start angle included — and flashes the arrow if that changes the main axis.
+
 Each axis's speed slider snaps to a ratio of the spin speed, written *spin
 turns : this axis's turns*, from **10:1** to **1:10** with **1:1** in the middle.
 A free speed would almost never come back to where it started on the same
@@ -602,7 +608,7 @@ any of the adjustments below it apply.
 **Show center axis** draws an arrow along the rotation axis so you can see
 whether the model sits on it: red pointing up for a Y main axis, green
 pointing at the camera for Z, blue pointing right for X. It also flashes up on its own whenever a Position
-control moves — two seconds at full strength, then a two-second fade — so the
+control moves or the Main spin axis changes — two seconds at full strength, then a two-second fade — so the
 reference is there exactly while it is being used and gone the rest of the time.
 The checkbox pins it on permanently and overrides the flash.
 

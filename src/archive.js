@@ -50,9 +50,15 @@ const OPAQUE_ARCHIVES = new Set(['rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'tgz']);
  * ordered by how much of the material information survives the trip: glTF and
  * FBX carry real texture bindings, OBJ needs a sidecar .mtl that is often
  * missing, and STL/PLY cannot reference a texture at all.
+ *
+ * The one exception is OBJ over DAE. On paper Collada carries more, but the
+ * ripped bundles that ship both are where it fails — a file no parser takes,
+ * or one whose textures land in the wrong places — while the OBJ beside it
+ * loads as it should. So OBJ sits just above DAE, and only DAE: everything
+ * else keeps its place relative to both.
  */
 const FORMAT_RANK = {
-  glb: 10, gltf: 10, fbx: 9, dae: 8, usdz: 8, '3mf': 7, obj: 6, '3ds': 5,
+  glb: 10, gltf: 10, fbx: 9, obj: 8.5, dae: 8, usdz: 8, '3mf': 7, '3ds': 5,
   vox: 4, ply: 3, stl: 2,
 };
 

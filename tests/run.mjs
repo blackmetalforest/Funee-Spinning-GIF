@@ -374,6 +374,16 @@ const ranked = rankModels([
 ]);
 check('glTF outranks a far larger OBJ', ranked[0].path === 'scene.gltf');
 check('OBJ outranks STL', ranked[1].path === 'source/model.obj');
+// Ripped bundles ship both, and the OBJ is the one that loads: it goes first
+// even when the DAE is bigger and nearer the top.
+const objDae = rankModels([
+  { path: 'Midna.dae', ext: 'dae', size: 8e6 },
+  { path: 'obj/Midna.obj', ext: 'obj', size: 2e6 },
+]);
+check('OBJ outranks DAE', objDae[0].path === 'obj/Midna.obj');
+check('FBX still outranks OBJ', rankModels([
+  { path: 'a.obj', ext: 'obj', size: 1e6 }, { path: 'a.fbx', ext: 'fbx', size: 1e6 },
+])[0].ext === 'fbx');
 const lods = rankModels([
   { path: 'model_LOD3.fbx', ext: 'fbx', size: 1e6 },
   { path: 'model.fbx', ext: 'fbx', size: 1e6 },
