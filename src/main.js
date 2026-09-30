@@ -37,7 +37,7 @@ let rendering = false;
 
 /* ------------------------------------------------------------ settings */
 
-const RANGE_IDS = ['elevation', 'start', 'fov', 'zoom', 'speed', 'fps',
+const RANGE_IDS = ['elevation', 'azimuth', 'start', 'fov', 'zoom', 'speed', 'fps',
   'ambient', 'key', 'fill', 'rim', 'specular', 'shininess',
   'env-intensity', 'env-rotation', 'exposure', 'brightness',
   'key-azimuth', 'key-height', 'fill-azimuth', 'fill-height', 'shadow-darkness',
@@ -74,6 +74,7 @@ function readSettings() {
     height: clampInt($('height').value, 32, 2000, 480),
     supersample: parseInt($('quality').value, 10),
     elevation: +$('elevation').value,
+    azimuth: +$('azimuth').value,
     startAngle: +$('start').value,
     upAxis: $('up-axis').value,
     spinAxis: $('spin-axis').value,
@@ -590,6 +591,7 @@ function trim(value) {
 
 function syncOutputs() {
   $('elevation-out').textContent = `${$('elevation').value}°`;
+  $('azimuth-out').textContent = `${$('azimuth').value}°`;
   $('start-out').textContent = `${$('start').value}°`;
   $('fov-out').textContent = `${$('fov').value}°`;
   $('zoom-out').textContent = `${trim(+$('zoom').value)}×`;
@@ -1835,7 +1837,7 @@ $('speed').addEventListener('input', (e) => {
  * double-click away — and the keys never get stuck on 90. Registered before
  * the listener below for the same reason as the speed snap.
  */
-const SNAP_ANGLE_IDS = ['start', 'pitch', 'yaw', 'roll'];
+const SNAP_ANGLE_IDS = ['elevation', 'azimuth', 'start', 'pitch', 'yaw', 'roll'];
 const SNAP_ANGLE = 90;
 const SNAP_WITHIN = 2;
 let snapDragging = false;
@@ -2019,6 +2021,7 @@ $('preset').addEventListener('change', () => {
 
 $('reset-view').addEventListener('click', () => {
   setSliderValue('elevation', DEFAULT_SETTINGS.elevation);
+  setSliderValue('azimuth', DEFAULT_SETTINGS.azimuth);
   setSliderValue('start', DEFAULT_SETTINGS.startAngle);
   $('up-axis').value = DEFAULT_SETTINGS.upAxis;
   setSliderValue('fov', DEFAULT_SETTINGS.fov);
@@ -2373,10 +2376,14 @@ canvas.addEventListener('pointermove', (e) => {
   const dx = (e.clientX - dragging.x) * 0.5;
   const dy = (e.clientY - dragging.y) * 0.5;
   dragging = { x: e.clientX, y: e.clientY };
-  $('start').value = (((+$('start').value + dx) % 360) + 360) % 360;
+  // The view, not the model: sideways walks the camera round it, wrapping at
+  // 180° so a drag can keep going, and up and down stops at straight above
+  // and straight below. Start angle is left alone, so the spin keeps its
+  // first frame and its axis whatever the view.
+  $('azimuth').value = ((((+$('azimuth').value + dx + 180) % 360) + 360) % 360) - 180;
   // Vertical drag is inverted relative to the horizontal one: dragging down
   // raises the camera so the model tips its top toward you.
-  $('elevation').value = Math.max(-89, Math.min(89, +$('elevation').value + dy));
+  $('elevation').value = Math.max(-90, Math.min(90, +$('elevation').value + dy));
   applyAndPreview();
 });
 for (const type of ['pointerup', 'pointercancel']) {

@@ -143,7 +143,7 @@
       <h2>Spin</h2>
       <div class="row"><label for="direction">Direction</label>
         <select id="direction"
-                title="As seen from the end of the main axis: from above for Y, from the camera for Z, from the right for X.">
+                title="As seen from the end of the main axis: from above for Y, from the front for Z, from the right for X.">
           <option value="cw" selected>Clockwise</option>
           <option value="ccw">Counter-clockwise</option>
         </select></div>
@@ -217,11 +217,22 @@
 
     <section class="group">
       <h2>View</h2>
-      <div class="row"><label for="elevation">View angle</label>
-        <input type="range" id="elevation" min="-90" max="90" step="1" value="20">
+      <!--
+        The camera, moving around the model: up and down, and all the way
+        round. Dragging the preview moves both. Neither turns the model, so the
+        spin keeps its axis however it is looked at.
+      -->
+      <div class="row"><label for="elevation">View up–down</label>
+        <input type="range" id="elevation" min="-90" max="90" step="1" value="20"
+               title="Look from above (up to 90°) or below (down to −90°). Drag the preview up and down to change it.">
         <output for="elevation" id="elevation-out">20°</output></div>
-      <div class="row"><label for="start">Start rotation</label>
-        <input type="range" id="start" min="0" max="359" step="1" value="0">
+      <div class="row"><label for="azimuth">View left–right</label>
+        <input type="range" id="azimuth" min="-180" max="180" step="1" value="0"
+               title="Walk round the model, up to 180° either way, to see it from any side. Drag the preview sideways to change it.">
+        <output for="azimuth" id="azimuth-out">0°</output></div>
+      <div class="row"><label for="start">Start angle</label>
+        <input type="range" id="start" min="0" max="359" step="1" value="0"
+               title="Where the spin starts, turned about the main axis: which pose is the first frame.">
         <output for="start" id="start-out">0°</output></div>
       <div class="row"><label for="fov">Field of view</label>
         <input type="range" id="fov" min="10" max="150" step="1" value="35">

@@ -515,12 +515,14 @@ the spin turns about:
 - **Z (toward you)**: a wheel facing the camera.
 - **X (left–right)**: head over heels.
 
-These are world axes, fixed to the view. **Up axis** (in Position) is a
-separate thing and does not change: it still decides which way up the model
-stands before any of this turns it. **Direction** is as seen from the end of
-the main axis — from above for Y, from the camera for Z, from the right for X
-— and **Start rotation** is where the spin starts about the main axis, so with
-Z it tilts the picture and with X it tips the model toward or away from you.
+These are world axes, named as they look from the default view. **View
+left–right** walks the camera round them without turning them, so from 90° a Z
+spin is seen edge-on. **Up axis** (in Position) is a separate thing and does
+not change: it still decides which way up the model stands before any of this
+turns it. **Direction** is as seen from the end of the main axis — from above
+for Y, from the front for Z, from the right for X — and **Start angle** (in
+View) is where the spin starts about the main axis, so with Z it tilts the
+picture and with X it tips the model toward or away from you.
 
 Below it are the other two axes, to turn about while the model spins: **X
 (left–right)**, head over heels; **Y (up–down)**, like a turntable; **Z (toward
@@ -567,7 +569,8 @@ Translation is in **bounding-sphere radii**: the model is normalised to radius 1
 on load, so 1.0 shifts it by its own radius whatever its real-world scale.
 Rotations apply in YXZ order (yaw, then pitch, then roll).
 
-Dragging a rotation slider — Pitch, Yaw, Roll, or View's Start rotation —
+Dragging a rotation slider — Pitch, Yaw, Roll, or View's up–down, left–right
+and Start angle —
 catches on 90° anywhere from 88° to 92° (and the same below zero). The arrow
 keys and a typed value are exact, so 89° is still easy to set.
 
@@ -609,9 +612,10 @@ it a useful reference: a re-measured arrow changes size as the model moves,
 which is exactly the comparison you are trying to make. It is preview-only and
 is forced off while frames are rendered, so it can never appear in an export.
 
-Note that **Yaw and Start rotation look identical while the model is centred** —
-both turn it about Y. They diverge once X/Z is non-zero: yaw turns the model in
-place, Start rotation carries it around the pivot.
+Note that **Yaw and Start angle look identical while the model is centred**
+and the main axis is Y — both turn it about Y. They diverge once X/Z is
+non-zero: yaw turns the model in place, Start angle carries it around the
+pivot.
 
 ## Foreground
 
@@ -849,8 +853,16 @@ app always has; off, each material is drawn as its file says.
 
 ## Preview
 
-With a model loaded, **dragging** the render view orbits it (Start rotation and
-View angle), and **scrolling** over it zooms: one wheel notch is one step of
+The **View** section places the camera. **View up–down** looks from above or
+below, from 90° to −90°; **View left–right** walks round the model, 180°
+either way, so every side can be seen. Both move the camera, not the model:
+the spin keeps its axis, its direction and its first frame, and the lights
+come round with the camera as they always have. **Start angle** below them is
+the spin's first frame, turned about the main axis.
+
+With a model loaded, **dragging** the render view orbits it — sideways is View
+left–right, wrapping round past 180° so a drag can keep going, and up and down
+is View up–down — and **scrolling** over it zooms: one wheel notch is one step of
 the Zoom slider, scrolling up to zoom in. The wheel stops at the slider's ends
 but leaves a typed zoom beyond them alone, and Ctrl+scroll is still the
 browser's own page zoom.

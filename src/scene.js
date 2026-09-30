@@ -88,6 +88,10 @@ export const DEFAULT_SETTINGS = {
   height: 480,
   supersample: 1,          // MSAA handles most of it; 2-3 for extra smoothing
   elevation: 20,
+  // The camera's way round the model, in degrees. Positive shows the model as
+  // a turn to the left (counter-clockwise from above) would, which is how
+  // dragging the preview sideways has always moved it.
+  azimuth: 0,
   startAngle: 0,
   upAxis: 'Y',
   // The axis the spin turns about, in world terms: 'Y' up–down, 'Z' toward the
@@ -965,7 +969,14 @@ export class SpinScene {
     // offset, and cured by zooming out.
     this.camera.near = Math.max(dist * 0.01, dist - (radius * 1.05 + reach));
     this.camera.far = dist + radius * 2.0 + reach;
-    this.camera.position.set(0, Math.sin(elev) * dist, Math.cos(elev) * dist);
+    // Round the model by -azimuth: the camera goes one way so the model
+    // appears to turn the other, just as the old Start rotation drag did.
+    const around = THREE.MathUtils.degToRad(-(s.azimuth || 0));
+    this.camera.position.set(
+      Math.sin(around) * Math.cos(elev) * dist,
+      Math.sin(elev) * dist,
+      Math.cos(around) * Math.cos(elev) * dist,
+    );
     this.camera.lookAt(0, 0, 0);
     this.camera.updateProjectionMatrix();
     this.camera.updateMatrixWorld();
