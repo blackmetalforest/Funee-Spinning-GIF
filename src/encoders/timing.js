@@ -134,11 +134,17 @@ export function frameAngles(nFrames, clockwise = true, start = 0) {
  * on the same frame as the spin, so the loop would jump; a whole-number ratio
  * always does. 1:3 turns the axis three times per spin and still loops after
  * one spin. 3:1 turns it once every three spins, so the loop has to run three
- * spins long, and costs three times the frames. Capping the ratios at 5 caps
- * that, although two axes at 4:1 and 5:1 need 20 spins between them to line
- * up — the frame count shows it, and warns as it would for any long loop.
+ * spins long, and costs three times the frames. Capping the ratios at 10 caps
+ * that, although two axes at 9:1 and 10:1 need 90 spins between them to line
+ * up — the frame count shows it, and warns or caps as it would for any long
+ * loop.
  */
 export const SPIN_RATIOS = [
+  { label: '10:1', main: 10, spins: 1 },
+  { label: '9:1', main: 9, spins: 1 },
+  { label: '8:1', main: 8, spins: 1 },
+  { label: '7:1', main: 7, spins: 1 },
+  { label: '6:1', main: 6, spins: 1 },
   { label: '5:1', main: 5, spins: 1 },
   { label: '4:1', main: 4, spins: 1 },
   { label: '3:1', main: 3, spins: 1 },
@@ -148,6 +154,11 @@ export const SPIN_RATIOS = [
   { label: '1:3', main: 1, spins: 3 },
   { label: '1:4', main: 1, spins: 4 },
   { label: '1:5', main: 1, spins: 5 },
+  { label: '1:6', main: 1, spins: 6 },
+  { label: '1:7', main: 1, spins: 7 },
+  { label: '1:8', main: 1, spins: 8 },
+  { label: '1:9', main: 1, spins: 9 },
+  { label: '1:10', main: 1, spins: 10 },
 ];
 
 function gcd(a, b) {

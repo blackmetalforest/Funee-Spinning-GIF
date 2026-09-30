@@ -535,16 +535,18 @@ model is turned as a whole, always in the order X, Y, Z, so the extra axes
 combine with the spin rather than replacing it.
 
 Each axis's speed slider snaps to a ratio of the spin speed, written *spin
-turns : this axis's turns*, from **5:1** to **1:5** with **1:1** in the middle.
+turns : this axis's turns*, from **10:1** to **1:10** with **1:1** in the middle.
 A free speed would almost never come back to where it started on the same
 frame as the spin, and the loop would jump; a whole-number ratio always does.
 
-- Faster ratios (1:2 to 1:5) turn the axis several times per spin, and the
+- Faster ratios (1:2 to 1:10) turn the axis several times per spin, and the
   loop is still one spin long.
-- Slower ratios (2:1 to 5:1) turn it once every few spins, so the loop has to
+- Slower ratios (2:1 to 10:1) turn it once every few spins, so the loop has to
   last that many spins, and it takes that many times the frames. The loop is
   the smallest number of spins that every axis finishes whole turns in: 3:1
-  and 2:1 together need 6, and 4:1 with 5:1 need 20.
+  and 2:1 together need 6, 4:1 with 5:1 need 20, and 9:1 with 10:1 need 90
+  — at any ordinary frame rate that meets the 1,000-frame cap, which then
+  lowers the frame rate to fit, as it does for any long loop.
 
 The frame count and the loop line under it include all of this — "frame rate ÷
 spin speed × 3 spins", "10.00 s/loop of 3 spins" — and warn or cap as they

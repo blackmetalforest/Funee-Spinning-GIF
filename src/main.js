@@ -176,7 +176,7 @@ function readExtraAxes() {
   return EXTRA_AXES
     .filter(({ axis, dir }) => axis !== main && $(dir).value !== 'off')
     .map(({ axis, dir, ratio }) => {
-      const { main, spins } = SPIN_RATIOS[clampInt($(ratio).value, 0, SPIN_RATIOS.length - 1, 4)];
+      const { main, spins } = SPIN_RATIOS[clampInt($(ratio).value, 0, SPIN_RATIOS.length - 1, SPIN_RATIOS.findIndex((x) => x.main === x.spins))];
       return { axis, main, spins, clockwise: $(dir).value === 'cw' };
     });
 }
