@@ -860,8 +860,14 @@ app always has; off, each material is drawn as its file says.
 
 ## Finding your way round the panel
 
-Each section's title is large and bright, with a blue bar beside it, so the
-sections stand apart in a long panel. Spin, View, Position and Rendering each
+The panel has a "console" look: grey plastic, buttons that press down, and
+a colour for each section, running through the rainbow from red at 3D model,
+through orange, yellow, green, teal, blue and purple, to a purplish red at
+Output. A section's title dot, sliders, checkboxes, selected buttons and main
+button all wear its colour, so each section stands apart in a long panel and
+you can tell where you are at a glance. Things outside the sections — the
+GitHub link, Browser check, the checkboxes under the render — are Text's
+purple. Section titles are large, in the bundled Oswald. Spin, View, Position and Rendering each
 have a small **↺ Reset** at the right of their title, which puts just that
 section back to how the page starts.
 

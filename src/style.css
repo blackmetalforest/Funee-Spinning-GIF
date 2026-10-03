@@ -81,16 +81,23 @@
 }
 
 :root {
-  --bg: #15161a;
-  --panel: #1c1e24;
-  --panel-2: #22252c;
-  --line: #2f333c;
-  --text: #e7e9ee;
-  --muted: #9aa1ad;
-  --accent: #4f8cff;
+  /* Console: grey plastic. Each settings section overrides --accent with its
+     own colour (see the Console block at the end of this file); everything
+     outside the sections — the GitHub link, Browser check, the preview's
+     checkboxes, the drop zone — takes Text's purple from here. */
+  --bg: #232326;
+  --panel: #323236;
+  --panel-2: #3d3d42;
+  --line: #55555c;
+  --text: #f4f4f4;
+  --muted: #c4c4cb;
+  --accent: #8a4fe0;
+  --on-accent: #fff;        /* text drawn on the accent colour */
+  --field: #28282c;         /* text boxes, dropdowns, the progress track */
+  --shadow: #1c1c1f;        /* the edge under a raised button */
   --danger: #e03131;
   --caution: #e8912d;
-  --radius: 8px;
+  --radius: 12px;
   /* Wide enough for the 460px title image to sit at its natural size: 460
      plus the panel's 12px padding either side, the title's 4px margins, and
      room for a scrollbar. */
@@ -105,7 +112,7 @@ html, body {
   height: 100%;
   background: var(--bg);
   color: var(--text);
-  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 14px/1.45 Arimo, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   overscroll-behavior: none;
 }
 
@@ -135,8 +142,8 @@ html, body {
   display: grid;
   place-items: center;
   background:
-    linear-gradient(45deg, #1a1c21 25%, transparent 25%, transparent 75%, #1a1c21 75%),
-    linear-gradient(45deg, #1a1c21 25%, #202329 25%, #202329 75%, #1a1c21 75%);
+    linear-gradient(45deg, #2a2a2e 25%, transparent 25%, transparent 75%, #2a2a2e 75%),
+    linear-gradient(45deg, #2a2a2e 25%, #303035 25%, #303035 75%, #2a2a2e 75%);
   background-size: 24px 24px;
   background-position: 0 0, 12px 12px;
   border: 1px solid var(--line);
@@ -286,7 +293,7 @@ html, body {
 }
 #dropzone[hidden] { display: none; }
 #app.dragover #dropzone {
-  background: rgba(79, 140, 255, 0.12);
+  background: rgba(138, 79, 224, 0.12);
   outline: 2px dashed var(--accent);
   outline-offset: -12px;
 }
@@ -499,7 +506,7 @@ input[type="range"] {
 }
 input[type="number"], input[type="text"], textarea, select {
   width: 100%;
-  background: #15171c;
+  background: var(--field);
   color: var(--text);
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -507,7 +514,7 @@ input[type="number"], input[type="text"], textarea, select {
   font: inherit;
 }
 input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); justify-self: start; }
-input[type="color"] { width: 56px; height: 30px; padding: 2px; background: #15171c; border: 1px solid var(--line); border-radius: 6px; }
+input[type="color"] { width: 56px; height: 30px; padding: 2px; background: var(--field); border: 1px solid var(--line); border-radius: 6px; }
 input[readonly] { color: var(--muted); }
 
 button {
@@ -530,7 +537,7 @@ button.primary:hover:not(:disabled) { filter: brightness(1.08); }
 
 #progress-wrap {
   height: 6px;
-  background: #15171c;
+  background: var(--field);
   border-radius: 999px;
   overflow: hidden;
   margin: 8px 0;
@@ -689,7 +696,8 @@ details.more[open] > summary { margin-bottom: 8px; }
 }
 .preset-grid button[aria-pressed="true"] {
   border-color: var(--accent);
-  background: #273654;      /* the accent, 22% over the panel */
+  background: var(--accent);
+  color: var(--on-accent);
 }
 #shading-note { margin: -2px 0 8px; }
 #shading-note:empty { display: none; }
@@ -843,3 +851,90 @@ details.more[open] > summary { margin-bottom: 8px; }
     align-self: center;       /* column flex: cross axis is horizontal */
   }
 }
+
+/* ------------------------------------------------------------- console */
+
+/*
+ * The Console look: grey plastic, buttons that press down, and a colour per
+ * section, red at the top running through the rainbow to a purplish red at
+ * Output. A section's colour is its --accent, so its title dot, sliders,
+ * checkboxes, chosen preset and main button all share it. Outside the
+ * sections the accent is Text's purple, from :root.
+ *
+ * Sections are matched by position in the panel, top to bottom: 3D model,
+ * Spin, View, Position, Image, Rendering, Text, Output.
+ */
+#panel > section.group:nth-of-type(1) { --accent: #e8392f; --on-accent: #fff; }
+#panel > section.group:nth-of-type(2) { --accent: #f07a1a; --on-accent: #232326; }
+#panel > section.group:nth-of-type(3) { --accent: #f2b705; --on-accent: #232326; }
+#panel > section.group:nth-of-type(4) { --accent: #2fae4a; --on-accent: #232326; }
+#panel > section.group:nth-of-type(5) { --accent: #17a6a6; --on-accent: #232326; }
+#panel > section.group:nth-of-type(6) { --accent: #2f6fe0; --on-accent: #fff; }
+#panel > section.group:nth-of-type(7) { --accent: #8a4fe0; --on-accent: #fff; }
+#panel > section.group:nth-of-type(8) { --accent: #c8378a; --on-accent: #fff; }
+
+#panel { scrollbar-color: var(--line) var(--panel); }
+
+.group {
+  border: 2px solid #232326;
+  box-shadow: inset 0 2px 0 #ffffff12;
+}
+/* Oswald, the bundled bold cut: condensed, but less so than Anton. */
+.group h2 {
+  font-family: 'Oswald', Impact, sans-serif;
+  font-weight: 400;
+  font-size: 17px;
+  letter-spacing: 0.08em;
+}
+.group h2::before {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  box-shadow: inset 0 -2px 0 #0004;
+}
+
+input[type="number"], input[type="text"], textarea, select, input[type="color"] {
+  border-radius: 9px;
+}
+input[type="checkbox"] { accent-color: var(--accent); }
+
+/* Buttons stand proud of the panel on a dark edge, and press down into it. */
+button {
+  background: #4a4a50;
+  border: none;
+  border-radius: 9px;
+  box-shadow: 0 3px 0 var(--shadow);
+  font-weight: 600;
+}
+button:hover:not(:disabled) { filter: brightness(1.12); }
+button:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 var(--shadow); }
+button.primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: 0 3px 0 color-mix(in srgb, var(--accent) 55%, black);
+}
+.preset-grid button[aria-pressed="true"] {
+  box-shadow: 0 3px 0 color-mix(in srgb, var(--accent) 55%, black);
+}
+button.reset {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: none;
+  font-weight: 400;
+}
+button.reset:hover:not(:disabled) { border-color: var(--accent); filter: none; }
+button.reset:active:not(:disabled) { transform: none; box-shadow: none; }
+button.link { box-shadow: none; font-weight: inherit; }
+/* The wordmark is a button (it plays the theme), but it should look like
+   nothing but the logo: no raised edge, no glow, no press. */
+#app-logo, #app-logo:hover, #app-logo:active {
+  box-shadow: none;
+  filter: none;
+  transform: none;
+  border-radius: 0;
+}
+button.link:active:not(:disabled) { transform: none; }
+
+/* Sliders keep the browser's own look; accent-color (set on them above)
+   paints each one in its section's colour. */
