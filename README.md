@@ -891,7 +891,14 @@ browser's own page zoom.
 A **Preview** checkbox under the render view (off by default) spins the model
 live while every other control stays adjustable. It sits with **Center axis**
 and **Image border**: the three toggles that change what the preview shows
-without changing a thing about the export.
+without changing a thing about the export. A second **Preview** box sits at
+the right of Spin's loop line ("294 frames · 5.88 s/turn · 50.0 fps…"), beside
+the numbers it plays; it is the same setting, so ticking either ticks both.
+
+The first time a model is loaded on each visit, a rounded orange arrow bounces
+over the Preview box under the render, because the live spin is easy to miss.
+It goes once Preview is ticked (either box) or the arrow is clicked, and
+comes back only when the page is loaded again.
 
 It replays the encoder's own delay table rather than spinning smoothly, so what
 you see is the cadence the file will have — including the judder GIF's 10 ms
@@ -1213,6 +1220,15 @@ formats are built from that store only when you hit Save. This matters:
   re-rendering.
 - **Lossless intermediates.** Because the store is PNG, GIF quantisation sees
   exact pixels and APNG export needs no re-encoding at all.
+
+The store belongs to the settings it was rendered with. **Changing any
+setting** — any control in the panel, or dragging the preview to turn the view
+— **throws it away**, and the Save buttons stay off until you render again, so
+an old render can never be saved by mistake once the preview shows something
+new. The line under Render frames says so. A change made while frames are
+rendering marks that render as out of date too. The exceptions are **Dither
+GIF** and **Lossless WebP**, which only shape the file a Save writes from the
+frames, and the **Preview** boxes.
 
 ### The background is a layer, not a clear colour
 

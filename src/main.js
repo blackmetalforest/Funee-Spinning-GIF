@@ -1126,6 +1126,7 @@ async function handleFile(file, choice = null) {
     if (playing) resyncCycle();
     schedulePreview();
     if ($('preview').checked) startPlayback();   // requested before a model existed
+    maybeShowPreviewHint();
   } catch (err) {
     console.error(err);
     $('model-info').innerHTML = `<span class="warn">${escapeHtml(friendlyError(err))}</span>`;
@@ -1215,7 +1216,6 @@ function showAdvanced(report) {
   const note = [];
   if (picking) note.push(ADVANCED_HINT);
   if (swapping) note.push(SWAP_HINT);
-  if (pruning) note.push(MESH_HINT);
   $('advanced-note').textContent = panel.hidden ? '' : note.join(' ');
 }
 
@@ -1475,14 +1475,9 @@ $('replacers').addEventListener('change', (event) => {
   if (select) replacerChanged(select);
 });
 
-const ADVANCED_HINT =
-  'Mix and match if the model looks wrong. Changing the model picks its '
-  + 'matching texture setup again.';
+const ADVANCED_HINT = 'Mix and match if the model looks wrong.';
 
-const SWAP_HINT = 'Fill in a replacer to swap one material\u2019s texture; another opens below it.';
-
-const MESH_HINT = 'Untick a mesh to leave it out \u2014 useful when a file holds '
-  + 'several versions of the same part stacked together.';
+const SWAP_HINT = 'Use Texture Replacer to swap face textures and skins.';
 
 function fillSelect(select, list, selected) {
   select.replaceChildren();
@@ -1668,11 +1663,43 @@ $('mesh-toggle-all').addEventListener('click', () => {
   applyMeshVisibility();
 });
 
+/*
+ * The rendered frames belong to the settings they were rendered with, so any
+ * change throws them away and Save waits for a new render — saving an old
+ * render by mistake is easy when the preview already shows the new look.
+ * The count lets a render that was running when something changed know that
+ * its result is already out of date.
+ */
+let storeGeneration = 0;
 function discardStore() {
+  const hadFrames = store !== null;
   store = null;
+  storeGeneration++;
   setSaveEnabled(false);
-  $('store-info').textContent = 'No frames rendered yet.';
+  $('store-info').textContent = hadFrames
+    ? 'Settings changed: render the frames again to save.'
+    : 'No frames rendered yet.';
   $('save-info').textContent = '';
+}
+
+/*
+ * Every control in the settings panel counts, whether or not it has its own
+ * call above: one listener here, in the capture phase so that it also hears
+ * the events the app dispatches itself without bubbling. The exceptions only
+ * shape the file a Save writes from the frames, or the preview, so they leave
+ * the frames as they are.
+ */
+const KEEPS_FRAMES = new Set(['dither', 'webp-lossless', 'preview-spin']);
+for (const type of ['input', 'change']) {
+  $('panel').addEventListener(type, (e) => {
+    if (!KEEPS_FRAMES.has(e.target.id)) settingsChanged();
+  }, true);
+}
+
+/* A change mid-render only marks that render as stale; it ends by itself. */
+function settingsChanged() {
+  if (rendering) storeGeneration++;
+  else if (store) discardStore();
 }
 
 /* --------------------------------------------------- typing a value in */
@@ -2005,13 +2032,27 @@ $('background-file').addEventListener('change', (e) => {
   e.target.value = '';
 });
 
+/*
+ * Preset names the canvas size while it is one of its own; typing a size of
+ * your own turns it to Custom, and typing your way back to one of its sizes
+ * picks that size again.
+ */
+function syncPreset() {
+  const { value: w } = $('width');
+  const match = w === $('height').value
+    && [...$('preset').options].some((o) => o.value && o.value === w);
+  $('preset').value = match ? w : '';
+}
 $('square').addEventListener('change', () => {
   if ($('square').checked) $('height').value = $('width').value;
+  syncPreset();
   applyAndPreview();
 });
 $('width').addEventListener('input', () => {
   if ($('square').checked) $('height').value = $('width').value;
+  syncPreset();
 });
+$('height').addEventListener('input', syncPreset);
 $('preset').addEventListener('change', () => {
   const size = $('preset').value;
   if (!size) return;
@@ -2342,10 +2383,37 @@ $('show-border').addEventListener('change', () => {
   $('frame').classList.toggle('show-border', $('show-border').checked);
 });
 
-$('preview').addEventListener('change', () => {
-  if ($('preview').checked) startPlayback();
-  else stopPlayback();
-});
+/*
+ * Two Preview boxes, one under the render and one on Spin's loop line, and
+ * one setting: whichever is clicked, the other follows, so every check of
+ * $('preview').checked stays true to both.
+ */
+for (const [id, twin] of [['preview', 'preview-spin'], ['preview-spin', 'preview']]) {
+  $(id).addEventListener('change', () => {
+    $(twin).checked = $(id).checked;
+    if ($(id).checked) {
+      hidePreviewHint();
+      startPlayback();
+    } else {
+      stopPlayback();
+    }
+  });
+}
+
+/*
+ * The first time a model loads on each visit, an arrow bounces over the
+ * Preview box: the live spin is the app's best trick and easy to miss. It
+ * goes when Preview is ticked or the arrow is clicked, and does not come back
+ * until the page is loaded again.
+ */
+let previewHintShown = false;
+function maybeShowPreviewHint() {
+  if (previewHintShown || $('preview').checked) return;
+  previewHintShown = true;
+  $('preview-hint').hidden = false;
+}
+function hidePreviewHint() { $('preview-hint').hidden = true; }
+$('preview-hint').addEventListener('click', hidePreviewHint);
 
 $('show-axis').addEventListener('change', () => {
   stopAxisFlash();          // applies the checkbox state and clears any fade
@@ -2400,6 +2468,7 @@ canvas.addEventListener('pointermove', (e) => {
   // and straight below. Start angle is left alone, so the spin keeps its
   // first frame and its axis whatever the view.
   $('azimuth').value = ((((+$('azimuth').value + dx + 180) % 360) + 360) % 360) - 180;
+  settingsChanged();                     // the view is part of the render
   // Vertical drag is inverted relative to the horizontal one: dragging down
   // raises the camera so the model tips its top toward you.
   $('elevation').value = Math.max(-90, Math.min(90, +$('elevation').value + dy));
@@ -2472,6 +2541,7 @@ $('render').addEventListener('click', async () => {
   try {
     $('render').disabled = true;
     $('cancel').disabled = false;
+    const generation = storeGeneration;
 
     scene.applySettings(readSettings());
     const spin = readSpin();
@@ -2493,6 +2563,9 @@ $('render').addEventListener('click', async () => {
 
     if (!result) {
       $('store-info').textContent = 'Cancelled.';
+    } else if (generation !== storeGeneration) {
+      // Something changed while it ran: these frames are already out of date.
+      $('store-info').textContent = 'Settings changed during the render: render the frames again to save.';
     } else {
       store = result;
       const seconds = ((performance.now() - started) / 1000).toFixed(1);

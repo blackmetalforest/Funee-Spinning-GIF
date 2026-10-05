@@ -53,7 +53,7 @@
         <div class="drop-inner">
           <strong>Drop a 3D model, .zip or picture here</strong>
           <span class="muted">GLB · GLTF · FBX · OBJ · STL · PLY · DAE · 3MF · USDZ · VOX · 3DS</span>
-          <span class="muted">PNG · JPEG · WebP · BMP · GIF, animated too</span>
+          <span class="muted">PNG · JPEG · WebP · BMP · GIF</span>
           <span class="muted small">A .zip is searched for a model and its textures</span>
           <button id="browse-empty" class="primary">Choose a file…</button>
         </div>
@@ -67,6 +67,14 @@
         <label><input type="checkbox" id="show-border"
                title="Outlines the exact edge of the exported image so you can see what will be cropped. Preview only — it never appears in the output."> Image border</label>
         <span class="preview-pair">
+          <!-- First-model tutorial: points at Preview until it is ticked. -->
+          <button type="button" id="preview-hint" class="preview-hint" hidden
+                  title="Tick Preview to watch it spin. Click the arrow to dismiss it." aria-label="Dismiss the Preview hint">
+            <svg viewBox="0 0 28 40" width="56" height="80" aria-hidden="true">
+              <path d="M14 4 V33 M5 24 L14 33 L23 24" fill="none" stroke="currentColor"
+                    stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
           <label><input type="checkbox" id="preview"
                  title="Spins the model live at the output's real frame rate, including GIF's 10 ms timing grid. Preview only — it never affects the export."> Preview</label>
           <output id="preview-fps"></output>
@@ -157,7 +165,13 @@
       <div class="row"><label>Frames</label>
         <span class="muted small" id="frames-note">frame rate ÷ spin speed</span>
         <output id="frames-out">100</output></div>
-      <p id="loop-info" class="muted small">—</p>
+      <!-- The Preview box again, beside the loop it plays; it mirrors the one
+           under the render. -->
+      <div class="loop-row">
+        <p id="loop-info" class="muted small">—</p>
+        <label class="loop-preview"><input type="checkbox" id="preview-spin"
+               title="The same as Preview under the render: spins the model live at the output's real frame rate."> Preview</label>
+      </div>
 
       <!--
         The main axis the spin turns about, then the other two, each turning at
@@ -282,10 +296,16 @@
       <div class="row"><label for="preset">Preset</label>
         <select id="preset">
           <option value="">Custom</option>
-          <option>128</option><option>200</option><option>256</option>
-          <option>320</option><option>400</option><option>480</option>
-          <option>600</option><option>720</option><option>800</option>
-          <option>1000</option>
+          <option value="128">128 × 128</option>
+          <option value="200">200 × 200</option>
+          <option value="256">256 × 256</option>
+          <option value="320">320 × 320</option>
+          <option value="400">400 × 400</option>
+          <option value="480" selected>480 × 480</option>
+          <option value="600">600 × 600</option>
+          <option value="720">720 × 720</option>
+          <option value="800">800 × 800</option>
+          <option value="1000">1000 × 1000</option>
         </select></div>
       <!-- Width × height, and Square, on one line. -->
       <div class="row canvas-row"><label for="width">Canvas</label>
@@ -324,9 +344,6 @@
           <input type="checkbox" id="fg-sync" checked
                  title="Speed the foreground's animation up or down so a whole number of plays fits one loop exactly, so the exported loop has no jump."></div>
         <p id="fg-sync-note" class="muted small" hidden></p>
-        <p class="muted small">Drawn over the model and under any text, with its
-          transparency. Placed like the background picture: 100% fits the
-          image's height.</p>
         <input id="fg-file" type="file" hidden
                accept=".jpg,.jpeg,.png,.webp,.bmp,.gif,image/jpeg,image/png,image/webp,image/bmp,image/gif">
       </div>
@@ -582,9 +599,6 @@
         <div class="row"><label for="text-size">Size</label>
           <input type="range" id="text-size" min="30" max="300" step="1" value="100">
           <output for="text-size" id="text-size-out">100%</output></div>
-        <p class="muted small">Letter size follows the image <em>height</em>, so
-          a wider image fits more on a line rather than growing the text.
-          Centred, wraps on its own; press Enter to break a line early.</p>
       </div>
     </section>
 
@@ -596,13 +610,13 @@
       </div>
       <div id="progress-wrap" hidden><div id="progress"></div></div>
       <p id="store-info" class="muted small">No frames rendered yet.</p>
-      <div class="row"><label for="dither">Dither GIF</label>
-        <span class="output-checks">
-          <input type="checkbox" id="dither" checked
-                 title="Floyd–Steinberg dithering. Trades a finer-grained, noisier image for smoother gradients across GIF's 256 colours. Affects the GIF export only.">
-          <label class="check-inline"><input type="checkbox" id="webp-lossless"
-                 title="Every pixel exactly as rendered, like APNG, at the cost of a bigger file. Affects the WebP export only."> Lossless WebP</label>
-        </span></div>
+      <!-- Each format's option sits centred over its Save button below. -->
+      <div class="save-options">
+        <label class="check-inline"><input type="checkbox" id="dither" checked
+               title="Use noise to smooth color transitions. Turning it off gives the GIF a more retro look."> Dither GIF</label>
+        <label class="check-inline"><input type="checkbox" id="webp-lossless"
+               title="Every pixel exactly as rendered with no compression, makes file size huge."> Lossless WebP</label>
+      </div>
       <div class="save-grid">
         <button class="save" data-format="gif" disabled>Save GIF</button>
         <button class="save" data-format="webp" disabled>Save WebP</button>
