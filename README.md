@@ -150,6 +150,16 @@ smaller copy of the texture there to avoid shimmer. Every other setting still
 works on it, and **Reset** (beside the Rendering title) goes back to these two. Neither is
 undone when a 3D model is loaded next.
 
+**The back of the card.** **Unflip Backside Image**, under 3D model →
+Advanced and shown only for a picture, shows the picture the right way round
+from behind instead of mirrored, so text on it reads correctly on both sides.
+The mirrored back is hidden whenever it is on.
+
+The card is built as two faces in the same plane, a front and a back turned
+half a turn, each drawn from its own side only. So there is no box, no
+edges to leave stray pixels when it turns edge-on, and the two never flicker
+against each other. The back shares the front's picture, animation included.
+
 **Transparency.** A PNG, WebP or GIF's alpha is read the same way a game rip's
 textures are (see [Transparent textures drawn black](#what-gets-repaired-on-the-way-in)):
 hard-edged transparency becomes a cut-out, soft transparency is blended, and

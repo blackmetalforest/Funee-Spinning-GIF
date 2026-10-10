@@ -98,12 +98,22 @@ export async function loadPictureModel(file, ext, { onProgress } = {}) {
 
   // Height 1, width to the aspect ratio; the scene rescales the model anyway.
   const aspect = decoded.sourceWidth / decoded.sourceHeight;
-  const geometry = new THREE.PlaneGeometry(aspect, 1);
+  const geometry = cardGeometry(aspect);
   const name = file.name.replace(/\.[^.]+$/, '');
-  const material = new THREE.MeshPhongMaterial({
+  // Two faces, one material each (see cardGeometry). The front is the card
+  // as it has always been, seen from both sides; the back is off until
+  // Unflip Backside Image turns it on and the front's own back off
+  // (SpinScene.syncMaterials).
+  const front = new THREE.MeshPhongMaterial({
     name, map: texture, side: THREE.DoubleSide,
   });
-  const mesh = new THREE.Mesh(geometry, material);
+  front.userData.pictureFace = 'front';
+  const back = new THREE.MeshPhongMaterial({
+    name: `${name} (back)`, map: texture, side: THREE.FrontSide,
+  });
+  back.userData.pictureFace = 'back';
+  back.visible = false;
+  const mesh = new THREE.Mesh(geometry, [front, back]);
   mesh.name = name;
   const object = new THREE.Group();
   object.add(mesh);
@@ -120,6 +130,38 @@ export async function loadPictureModel(file, ext, { onProgress } = {}) {
       animationLost: decoded.animationLost,
     },
   };
+}
+
+/**
+ * The card: a front face and a back face, in one geometry with a group each.
+ *
+ * The back is the front turned half a turn about the vertical, so its
+ * picture reads the right way round from behind instead of mirrored. The two
+ * lie in the same plane, facing opposite ways, so there is no box, no sides
+ * and nothing at the edges to show as stray pixels; and as long as each is
+ * drawn from its own side only, they never compete for the same pixel.
+ */
+function cardGeometry(aspect) {
+  const frontFace = new THREE.PlaneGeometry(aspect, 1);
+  const backFace = frontFace.clone().rotateY(Math.PI);
+  const geometry = new THREE.BufferGeometry();
+  for (const attribute of ['position', 'normal', 'uv']) {
+    const a = frontFace.getAttribute(attribute);
+    const b = backFace.getAttribute(attribute);
+    const joined = new Float32Array(a.array.length + b.array.length);
+    joined.set(a.array);
+    joined.set(b.array, a.array.length);
+    geometry.setAttribute(attribute, new THREE.BufferAttribute(joined, a.itemSize));
+  }
+  const offset = frontFace.getAttribute('position').count;
+  const frontIndex = Array.from(frontFace.index.array);
+  const backIndex = Array.from(backFace.index.array, (i) => i + offset);
+  geometry.setIndex([...frontIndex, ...backIndex]);
+  geometry.addGroup(0, frontIndex.length, 0);
+  geometry.addGroup(frontIndex.length, backIndex.length, 1);
+  frontFace.dispose();
+  backFace.dispose();
+  return geometry;
 }
 
 /**

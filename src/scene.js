@@ -157,6 +157,9 @@ export const DEFAULT_SETTINGS = {
   emissionStrength: 1.0,
   textureFilter: 'smooth',
   doubleSided: true,
+  // A picture loaded as the model (image-model.js): show its own back face,
+  // which reads the right way round, in place of the front's mirrored back.
+  pictureUnflip: false,
 };
 
 export class SpinScene {
@@ -666,6 +669,7 @@ export class SpinScene {
         ? toClassic(source, mesh, this.settings)
         : toPhysical(source, mesh);
       material.userData.fileSide ??= source?.side ?? THREE.FrontSide;
+      material.userData.pictureFace ??= source?.userData?.pictureFace;
       // GLTFLoader turns depth writing off for every blended material, which
       // is right for a pane of glass and badly wrong for the common export
       // that marks a *whole model* as blended because one part of its atlas
@@ -692,6 +696,7 @@ export class SpinScene {
     const shading = this.resolveShading(s.shading);
     const strengths = { normalStrength: s.normalStrength, emissionStrength: s.emissionStrength };
     const key = JSON.stringify([shading, s.view, s.layers, s.doubleSided, s.textureFilter,
+      s.pictureUnflip,
       // Debug views copy their values when built, so they rebuild on these.
       s.view === 'final' ? null : strengths]);
 
@@ -709,15 +714,20 @@ export class SpinScene {
           const material = this.renderMaterial(source, mesh, shading);
           if (!renders.has(material)) {
             renders.add(material);
-            const side = s.doubleSided ? THREE.DoubleSide : material.userData.fileSide;
+            const side = sideFor(material, s);
             if (material.side !== side) { material.side = side; material.needsUpdate = true; }
+            // A picture's back face is drawn only while Unflip is on.
+            material.visible = material.userData.pictureFace !== 'back' || s.pictureUnflip;
             applyLayers(material, s.layers, strengths);
             for (const slot of TEXTURE_SLOTS) {
               applyFiltering(material.userData.full?.[slot] ?? material[slot],
                 s.textureFilter, maxAnisotropy);
             }
           }
-          return s.view === 'final' ? material : this.debugView(material, s.view);
+          if (s.view === 'final') return material;
+          const debug = this.debugView(material, s.view);
+          debug.visible = material.visible;
+          return debug;
         });
         mesh.material = mesh.userData.multi ? drawn : drawn[0];
       });
@@ -748,10 +758,13 @@ export class SpinScene {
    */
   layerCounts() {
     const counts = Object.fromEntries(LAYERS.map((l) => [l.key, 0]));
-    for (const material of this.renderMaterials) {
+    // A picture's back face is the same picture again, not a second material
+    // anyone would count.
+    const counted = [...this.renderMaterials].filter((m) => m.userData.pictureFace !== 'back');
+    for (const material of counted) {
       for (const key of layersOf(material)) counts[key]++;
     }
-    return { counts, total: this.renderMaterials.size, shading: this.shadingInUse };
+    return { counts, total: counted.length, shading: this.shadingInUse };
   }
 
   /**
@@ -1136,6 +1149,20 @@ function maxRadiusFromPoint(root, centre) {
     }
   });
   return Math.sqrt(maxSq);
+}
+
+/**
+ * Which side of a material to draw. Normally the Double-sided switch decides,
+ * falling back on what the file said. A picture card's two faces are decided
+ * by Unflip instead: with it on, the front loses its mirrored back and the
+ * back face, seen from behind only, takes its place — so the two never draw
+ * over each other.
+ */
+function sideFor(material, s) {
+  const face = material.userData.pictureFace;
+  if (face === 'front') return s.pictureUnflip ? THREE.FrontSide : THREE.DoubleSide;
+  if (face === 'back') return THREE.FrontSide;
+  return s.doubleSided ? THREE.DoubleSide : material.userData.fileSide;
 }
 
 /** Every material on a mesh, whether it holds one or an array of them. */

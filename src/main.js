@@ -119,6 +119,7 @@ function readSettings() {
     emissionStrength: +$('emission-strength').value,
     textureFilter: $('texture-filter').value,
     doubleSided: $('double-sided').checked,
+    pictureUnflip: $('picture-unflip').checked,
   };
 }
 
@@ -1210,7 +1211,11 @@ function showAdvanced(report) {
   $('row-sync').hidden = !syncing;
   $('sync-note').hidden = !syncing;
 
-  panel.hidden = picking === 0 && !swapping && !pruning && !syncing;
+  // How a picture's back looks: for a picture, and for nothing else.
+  const picture = !!scene.model && pictureLoaded;
+  $('row-unflip').hidden = !picture;
+
+  panel.hidden = picking === 0 && !swapping && !pruning && !syncing && !picture;
   if (panel.hidden) panel.open = false;
 
   const note = [];
@@ -1888,7 +1893,8 @@ for (const id of RANGE_IDS) {
 }
 for (const id of ['up-axis', 'direction', 'quality', 'background', 'background-mode',
   'width', 'height', 'spin-axis', 'spin-x-dir', 'spin-x-ratio', 'spin-y-dir', 'spin-y-ratio',
-  'spin-z-dir', 'spin-z-ratio', 'sync-anim', 'bg-sync', 'fg-sync']) {
+  'spin-z-dir', 'spin-z-ratio', 'sync-anim', 'bg-sync', 'fg-sync',
+  'picture-unflip']) {
   $(id).addEventListener('input', () => { discardStore(); applyAndPreview(); });
 }
 
@@ -2619,7 +2625,7 @@ async function saveAs(format) {
         dither: $('dither').checked,
       });
       blob = gifBlob;
-      note = `${info.totalMs} ms per ${loopWord}`;
+      note = `${seconds(info.totalMs)} per ${loopWord}`;
     } else if (format === 'webp') {
       const frames = await decodeFrames(store);
       const info = loopSummary(frames.length, spin.rps, 'webp');
@@ -2634,7 +2640,7 @@ async function saveAs(format) {
       blob = new Blob([muxAnimation(stills, {
         width: store.width, height: store.height, loop: 0,
       })], { type: 'image/webp' });
-      note = `${info.totalMs} ms per ${loopWord}`;
+      note = `${seconds(info.totalMs)} per ${loopWord}`;
       // Lossless is asked for as quality 1, which a browser may still take
       // as merely its best lossy; the frame's own header says which it made.
       if (lossless) note += isLosslessWebp(stills[0].data) ? ' · lossless' : ' · lossy: this browser has no lossless WebP';
@@ -2652,16 +2658,16 @@ async function saveAs(format) {
         width: store.width, height: store.height, loop: 0,
       })], { type: 'image/apng' });
       extension = 'png';
-      note = `${info.totalMs} ms per ${loopWord} · lossless`;
+      note = `${seconds(info.totalMs)} per ${loopWord} · lossless`;
     } else if (format === 'zip') {
       blob = await encodeZip(store, { name: `${modelName}_frames` });
       note = `${store.blobs.length} PNG frames`;
     }
 
     download(blob, `${modelName}_spin.${extension}`);
-    $('save-info').textContent =
-      `Saved ${modelName}_spin.${extension} — ${(blob.size / 1024).toFixed(0)} KB` +
-      (note ? ` · ${note}` : '');
+    $('save-info').innerHTML =
+      `Saved ${escapeHtml(`${modelName}_spin.${extension}`)} — ${fileSizeHtml(blob.size)}` +
+      (note ? ` · ${escapeHtml(note)}` : '');
   } catch (err) {
     console.error(err);
     $('save-info').innerHTML = `<span class="warn">${escapeHtml(friendlyError(err))}</span>`;
@@ -2681,6 +2687,25 @@ function isLosslessWebp(bytes) {
     i += 8 + size + (size & 1);
   }
   return false;
+}
+
+/** A loop's length for the save line: always seconds, to two places. */
+function seconds(ms) {
+  return `${(ms / 1000).toFixed(2)} s`;
+}
+
+/*
+ * A saved file's size for the save line: KB up to 1024 KB, MB to two places
+ * above that, and bold red, around the size alone, from 9.9 MB up.
+ */
+const BIG_FILE_MB = 9.9;
+function fileSizeHtml(bytes) {
+  const kb = bytes / 1024;
+  if (kb <= 1024) return `${kb.toFixed(0)} KB`;
+  const mb = (kb / 1024).toFixed(2);
+  const text = `${mb} MB`;
+  // Judged on the figure shown, so "9.90 MB" is always red, never just under.
+  return +mb >= BIG_FILE_MB ? `<strong class="warn">${text}</strong>` : text;
 }
 
 function download(blob, filename) {
