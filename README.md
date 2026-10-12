@@ -189,6 +189,34 @@ textures are (see [Transparent textures drawn black](#what-gets-repaired-on-the-
 hard-edged transparency becomes a cut-out, soft transparency is blended, and
 the **Transparency** layer switch turns it off.
 
+**Depth.** A still picture with see-through parts — a PNG or WebP cut-out,
+or a still GIF with a transparent colour — gets a **Depth** box under 3D
+model → Advanced. Ticked, the picture becomes a solid shape cut to its
+outline, as if from a thick sheet, and a **Thickness** slider appears: a
+share of the picture's longer side, 10% to start. It is not offered for an
+animated picture or one with no transparency.
+
+- **Where the body ends.** A pixel at least half opaque is solid; anything
+  less is empty. A feathered or anti-aliased edge is cut at its halfway line,
+  so there is one clear outline.
+- **Smooth edges.** The outline runs through the middle of each pixel edge,
+  which cuts every stair step into a diagonal, and is then smoothed lightly,
+  so a curve stays a curve seen from the side. The sides' shading follows the
+  outline over a few pixels, so they do not show the pixel steps as lines
+  either; sharp corners stay sharp.
+- **Colours.** The front and back show the picture; the back is the front
+  seen from behind, so it is mirrored, and **Unflip Backside Image** is
+  hidden while Depth is on (a picture turned round would no longer fit the
+  outline). The sides take the colour just inside the edge, from a softly
+  blurred copy of the picture so a thin drawn outline does not streak.
+- **Lighting.** Under the Flat preset the sides are as flat as the front, so
+  the depth shows only in the silhouette; any lit preset shades them.
+- **Size.** The model is framed to the picture's full rectangle made that
+  thick, so switching Depth on does not change the picture's size.
+
+The shape is built the first time Depth is switched on, and kept; the slider
+only stretches it. See `src/picture-depth.js`.
+
 **Animation.** An animated GIF or WebP (or APNG) is decoded to all of its
 frames when it loads, and each output frame shows the picture the animation
 would be showing at that moment — in the preview and in every export alike.
@@ -1370,6 +1398,7 @@ src/main.js           wiring: controls -> scene -> frame store -> exports
 src/scene.js          three.js scene, framing, lights, shadows
 src/loaders.js        format dispatch
 src/image-model.js    pictures as a flat card, and animated frames
+src/picture-depth.js  a still picture's solid parts as a shape with depth
 src/archive.js        the zip hunter: flatten, pick a model, find its textures
 src/materials.js      Retro and Realistic materials, layer switches, debug views
 src/presets.js        the eight lighting presets for each path

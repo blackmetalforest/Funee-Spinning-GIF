@@ -160,6 +160,10 @@ export const DEFAULT_SETTINGS = {
   // A picture loaded as the model (image-model.js): show its own back face,
   // which reads the right way round, in place of the front's mirrored back.
   pictureUnflip: false,
+  // A still picture with see-through parts: its solid parts as a slab this
+  // thick, in % of the picture's longer side (picture-depth.js).
+  pictureDepth: false,
+  pictureDepthAmount: 10,
 };
 
 export class SpinScene {
@@ -515,6 +519,7 @@ export class SpinScene {
     this.model = object;
     this.adjust.add(object);
     this.groundKey = null;
+    this.depthKey = null;
 
     // Measure with the adjustment group at identity. The normalisation below
     // reads world matrices, so leaving a user offset applied here would fold it
@@ -684,6 +689,56 @@ export class SpinScene {
   }
 
   /**
+   * Whether the loaded model is a picture that can have Depth: a still with
+   * see-through parts, which the loader's alpha pass (useMapAlpha) has found
+   * and marked on the card's material.
+   */
+  get pictureDepthPossible() {
+    let possible = false;
+    this.eachMesh((mesh) => {
+      const picture = mesh.userData.picture;
+      const front = mesh.userData.sources?.[0];
+      if (picture?.still && (front?.alphaTest > 0 || front?.transparent)) possible = true;
+    });
+    return possible;
+  }
+
+  /**
+   * Show a picture as its flat card or, with Depth on, as the slab
+   * (image-model.js), built the first time it is wanted.
+   *
+   * The slab is one unit deep and is stretched to the thickness here, which
+   * leaves its normals right. The model is then rescaled to the box the card
+   * spans, made that thick, rather than to the slab's own outline: switching
+   * Depth on keeps the picture the size it was, instead of jumping as large
+   * as its cut-out allows.
+   */
+  syncPictureDepth(s) {
+    const possible = this.pictureDepthPossible;
+    const key = `${possible && s.pictureDepth}|${s.pictureDepthAmount}`;
+    if (!this.model || key === this.depthKey) return;
+    this.depthKey = key;
+    this.eachMesh((mesh) => {
+      const picture = mesh.userData.picture;
+      if (!picture) return;
+      const solid = possible && s.pictureDepth;
+      const thickness = solid
+        ? Math.max(0, s.pictureDepthAmount) / 100 * Math.max(picture.aspect, 1) : 0;
+      if (solid && !picture.solid) {
+        picture.solid = picture.buildSolid();
+        mesh.userData.sources.splice(2, 2, ...picture.solid.materials);
+        this.materialKey = null;               // materials to convert
+      }
+      mesh.geometry = solid ? picture.solid.geometry : picture.card;
+      mesh.scale.z = solid ? Math.max(thickness, 1e-4) : 1;
+      this.model.scale.setScalar(2 / Math.hypot(picture.aspect, 1, thickness));
+    });
+    // The floor and the arrow were measured from the old shape.
+    this.groundKey = null;
+    this.arrowAxis = null;
+  }
+
+  /**
    * Put the right materials on every mesh for the current settings.
    *
    * The expensive part — choosing materials, switching layers that change the
@@ -758,9 +813,10 @@ export class SpinScene {
    */
   layerCounts() {
     const counts = Object.fromEntries(LAYERS.map((l) => [l.key, 0]));
-    // A picture's back face is the same picture again, not a second material
-    // anyone would count.
-    const counted = [...this.renderMaterials].filter((m) => m.userData.pictureFace !== 'back');
+    // A picture's back face and its Depth slab are the same picture again,
+    // not more materials anyone would count.
+    const counted = [...this.renderMaterials]
+      .filter((m) => m.userData.pictureFace !== 'back' && m.userData.pictureFace !== 'solid');
     for (const material of counted) {
       for (const key of layersOf(material)) counts[key]++;
     }
@@ -857,6 +913,7 @@ export class SpinScene {
     this.hemi.color.set(s.ambientColor);
     this.hemi.groundColor.set(s.ambientColor).multiplyScalar(0.65);
 
+    this.syncPictureDepth(s);
     this.syncMaterials(s);
 
     // The environment is for physical materials only. three.js would hand it
@@ -1105,6 +1162,9 @@ export class SpinScene {
     this.model.traverse((child) => {
       if (!child.isMesh) return;
       child.geometry?.dispose?.();
+      // A picture's shape not on show: the card while Depth is on, or the slab.
+      child.userData.picture?.card.dispose();
+      child.userData.picture?.solid?.geometry.dispose();
       for (const m of child.userData.sources ?? []) materials.add(m);
       for (const m of materialsOf(child)) materials.add(m);
     });
@@ -1156,12 +1216,13 @@ function maxRadiusFromPoint(root, centre) {
  * falling back on what the file said. A picture card's two faces are decided
  * by Unflip instead: with it on, the front loses its mirrored back and the
  * back face, seen from behind only, takes its place — so the two never draw
- * over each other.
+ * over each other. Its Depth slab is closed all round, so its inside never
+ * shows and need not be drawn.
  */
 function sideFor(material, s) {
   const face = material.userData.pictureFace;
   if (face === 'front') return s.pictureUnflip ? THREE.FrontSide : THREE.DoubleSide;
-  if (face === 'back') return THREE.FrontSide;
+  if (face === 'back' || face === 'solid') return THREE.FrontSide;
   return s.doubleSided ? THREE.DoubleSide : material.userData.fileSide;
 }
 

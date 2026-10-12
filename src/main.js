@@ -44,7 +44,8 @@ const RANGE_IDS = ['elevation', 'azimuth', 'start', 'fov', 'zoom', 'speed', 'fps
   'normal-strength', 'emission-strength',
   'pos-x', 'pos-y', 'pos-z', 'pitch', 'yaw', 'roll',
   'text-stroke', 'text-size',
-  'background-size', 'background-x', 'background-y', 'fg-size', 'fg-x', 'fg-y'];
+  'background-size', 'background-x', 'background-y', 'fg-size', 'fg-x', 'fg-y',
+  'depth-amount'];
 
 // The Rendering section's choices. Like the Image section's, each one changes
 // what a render produces, so each drops the frame store. Lighting ('shading')
@@ -120,6 +121,8 @@ function readSettings() {
     textureFilter: $('texture-filter').value,
     doubleSided: $('double-sided').checked,
     pictureUnflip: $('picture-unflip').checked,
+    pictureDepth: $('picture-depth').checked,
+    pictureDepthAmount: +$('depth-amount').value,
   };
 }
 
@@ -620,6 +623,7 @@ function syncOutputs() {
   $('text-size-out').textContent = `${$('text-size').value}%`;
   $('background-size-out').textContent = `${$('background-size').value}%`;
   $('fg-size-out').textContent = `${$('fg-size').value}%`;
+  $('depth-amount-out').textContent = `${$('depth-amount').value}%`;
   for (const id of ['background-x', 'background-y', 'fg-x', 'fg-y']) {
     $(`${id}-out`).textContent = $(id).value;
   }
@@ -1213,7 +1217,7 @@ function showAdvanced(report) {
 
   // How a picture's back looks: for a picture, and for nothing else.
   const picture = !!scene.model && pictureLoaded;
-  $('row-unflip').hidden = !picture;
+  syncDepthRows();
 
   panel.hidden = picking === 0 && !swapping && !pruning && !syncing && !picture;
   if (panel.hidden) panel.open = false;
@@ -1223,6 +1227,23 @@ function showAdvanced(report) {
   if (swapping) note.push(SWAP_HINT);
   $('advanced-note').textContent = panel.hidden ? '' : note.join(' ');
 }
+
+/**
+ * The picture rows of Advanced. Depth is offered only for a still picture
+ * with see-through parts, and its thickness only while it is on. Unflip
+ * goes while Depth is on: a solid shape's back is its front seen from
+ * behind, and a picture turned the right way round would not fit its
+ * outline.
+ */
+function syncDepthRows() {
+  const picture = !!scene.model && pictureLoaded;
+  const depth = picture && scene.pictureDepthPossible;
+  const deep = depth && $('picture-depth').checked;
+  $('row-depth').hidden = !depth;
+  $('row-depth-amount').hidden = !deep;
+  $('row-unflip').hidden = !picture || deep;
+}
+$('picture-depth').addEventListener('input', syncDepthRows);
 
 /* ----------------------------------------------------------- mesh picker */
 
@@ -1894,7 +1915,7 @@ for (const id of RANGE_IDS) {
 for (const id of ['up-axis', 'direction', 'quality', 'background', 'background-mode',
   'width', 'height', 'spin-axis', 'spin-x-dir', 'spin-x-ratio', 'spin-y-dir', 'spin-y-ratio',
   'spin-z-dir', 'spin-z-ratio', 'sync-anim', 'bg-sync', 'fg-sync',
-  'picture-unflip']) {
+  'picture-unflip', 'picture-depth']) {
   $(id).addEventListener('input', () => { discardStore(); applyAndPreview(); });
 }
 

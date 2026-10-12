@@ -22,9 +22,14 @@
  *
  * Decoding an animation needs the browser's ImageDecoder (WebCodecs). Without
  * it the picture still loads, as its first frame, and the stats say so.
+ *
+ * **Depth.** A still picture with see-through parts can be a slab cut to its
+ * outline instead (picture-depth.js). The scene swaps the slab in for the
+ * card while Depth is on, and back out when it is off.
  */
 
 import * as THREE from '../vendor/three/three.module.js';
+import { solidMask, outlineShapes, slabArrays, solidPixels, wallPixels } from './picture-depth.js';
 
 export const PICTURE_MODEL_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'];
 
@@ -115,6 +120,16 @@ export async function loadPictureModel(file, ext, { onProgress } = {}) {
   back.visible = false;
   const mesh = new THREE.Mesh(geometry, [front, back]);
   mesh.name = name;
+  // What the scene needs to give a still picture Depth (picture-depth.js).
+  // The slab is built the first time it is asked for, not here: most
+  // pictures never want it, and a big one takes a moment.
+  mesh.userData.picture = {
+    aspect,
+    still: frames.length === 1,
+    card: geometry,
+    solid: null,
+    buildSolid: () => buildSolid(frames[0], aspect, name),
+  };
   const object = new THREE.Group();
   object.add(mesh);
 
@@ -162,6 +177,54 @@ function cardGeometry(aspect) {
   frontFace.dispose();
   backFace.dispose();
   return geometry;
+}
+
+/**
+ * The picture's slab for Depth: its geometry, and two materials of its own,
+ * for the mesh's third and fourth slots. The faces' texture is the picture
+ * made fully opaque, with the colours just outside the outline filled in from
+ * inside it (solidPixels); the walls' is a small blurred copy of that
+ * (wallPixels).
+ */
+function buildSolid(bitmap, aspect, name) {
+  const { width, height } = bitmap;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  // The bitmap is upside down for the texture, and stays so: the rows below
+  // count up the picture, as the texture's v does.
+  context.drawImage(bitmap, 0, 0);
+  const { data } = context.getImageData(0, 0, width, height);
+  const mask = solidMask(data, width, height);
+  const arrays = slabArrays(outlineShapes(mask, width, height), width, height, aspect);
+  const opaque = solidPixels(data, mask, width, height);
+  context.putImageData(new ImageData(opaque, width, height), 0, 0);
+
+  const wall = wallPixels(opaque, width, height);
+  const wallCanvas = document.createElement('canvas');
+  wallCanvas.width = wall.width;
+  wallCanvas.height = wall.height;
+  wallCanvas.getContext('2d').putImageData(new ImageData(wall.data, wall.width, wall.height), 0, 0);
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(arrays.position, 3));
+  geometry.setAttribute('normal', new THREE.BufferAttribute(arrays.normal, 3));
+  geometry.setAttribute('uv', new THREE.BufferAttribute(arrays.uv, 2));
+  geometry.setIndex(new THREE.BufferAttribute(arrays.index, 1));
+  geometry.addGroup(0, arrays.faceCount, 2);
+  geometry.addGroup(arrays.faceCount, arrays.index.length - arrays.faceCount, 3);
+
+  const material = (image, label) => {
+    const texture = new THREE.Texture(image);
+    texture.flipY = false;
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.needsUpdate = true;
+    const made = new THREE.MeshPhongMaterial({ name: `${name} (${label})`, map: texture });
+    made.userData.pictureFace = 'solid';
+    return made;
+  };
+  return { geometry, materials: [material(canvas, 'depth'), material(wallCanvas, 'depth sides')] };
 }
 
 /**

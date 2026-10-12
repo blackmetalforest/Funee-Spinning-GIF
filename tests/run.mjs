@@ -16,6 +16,8 @@ import { frameDelaysMs, loopSummary, frameAngles, roundHalfToEven,
          frameStarts, frameIndexAt, SPIN_RATIOS, loopTurns,
          framePoses, frameTimesMs, syncScale, syncLoops, nearestWhole } from '../src/encoders/timing.js';
 import { playableDelays, PICTURE_MODEL_EXTENSIONS } from '../src/image-model.js';
+import { solidMask, traceOutlines, loopArea, outlineShapes, slabArrays, solidPixels,
+         wallPixels, wallNormals, SOLID_ALPHA } from '../src/picture-depth.js';
 import { MODEL_EXTENSIONS } from '../src/archive.js';
 import { muxAnimation } from '../src/encoders/webp.js';
 import { muxApng } from '../src/encoders/apng.js';
@@ -120,6 +122,119 @@ console.log('\npictures as models');
   }
   check('inside a zip a picture is still a texture, not a model',
     PICTURE_MODEL_EXTENSIONS.every((ext) => !MODEL_EXTENSIONS.has(ext)));
+}
+
+console.log('\npicture depth');
+{
+  // An RGBA picture from a function of (x, y) giving the alpha.
+  const picture = (w, h, alpha) => {
+    const rgba = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        rgba[i] = x * 10; rgba[i + 1] = y * 10; rgba[i + 2] = 7; rgba[i + 3] = alpha(x, y);
+      }
+    }
+    return rgba;
+  };
+  const mask = (w, h, solid) => solidMask(picture(w, h, (x, y) => (solid(x, y) ? 255 : 0)), w, h);
+
+  check('alpha of 50% counts as solid, just under it does not',
+    solidMask(picture(2, 1, (x) => (x ? SOLID_ALPHA : SOLID_ALPHA - 1)), 2, 1).join() === '0,1');
+
+  const one = traceOutlines(mask(3, 3, (x, y) => x === 1 && y === 1), 3, 3);
+  check('a lone pixel is one loop through its four edge middles',
+    one.length === 1 && one[0].join() === '1.5,1,2,1.5,1.5,2,1,1.5');
+  check('an outside edge runs anticlockwise', loopArea(one[0]) === 0.5);
+
+  const diagonal = traceOutlines(mask(4, 4, (x, y) => (x === 1 && y === 1) || (x === 2 && y === 2)), 4, 4);
+  check('pixels touching at a corner stay one piece', diagonal.length === 1);
+
+  // A ring with a dot in its hole: two shapes, the ring holding one hole.
+  const W = 200;
+  const H = 100;
+  const ring = mask(W, H, (x, y) => {
+    const r = Math.hypot(x + 0.5 - 100, y + 0.5 - 50);
+    return (r < 40 && r >= 20) || r < 5;
+  });
+  const shapes = outlineShapes(ring, W, H);
+  const outer = shapes.find((shape) => shape.holes.length);
+  check('a ring with a dot inside is two shapes, one with a hole',
+    shapes.length === 2 && outer?.holes.length === 1);
+  let near = Infinity;
+  let far = 0;
+  for (let i = 0; i < outer.outline.length; i += 2) {
+    const r = Math.hypot(outer.outline[i] - 100, outer.outline[i + 1] - 50);
+    near = Math.min(near, r);
+    far = Math.max(far, r);
+  }
+  check('a round edge stays within half a pixel of the circle', near > 39.5 && far < 40.5,
+    `${near} to ${far}`);
+
+  const slab = slabArrays(shapes, W, H, W / H);
+  const key = (i) => [0, 1, 2].map((c) => slab.position[i * 3 + c].toFixed(5)).join();
+  const edges = new Map();
+  for (let i = 0; i < slab.index.length; i += 3) {
+    for (let k = 0; k < 3; k++) {
+      const edge = `${key(slab.index[i + k])}|${key(slab.index[i + (k + 1) % 3])}`;
+      edges.set(edge, (edges.get(edge) ?? 0) + 1);
+    }
+  }
+  let open = 0;
+  for (const [edge, count] of edges) {
+    const [a, b] = edge.split('|');
+    if (edges.get(`${b}|${a}`) !== count) open++;
+  }
+  check('the slab is closed, with no gap between face and wall', open === 0, `${open} open edges`);
+  let volume = 0;
+  const p = slab.position;
+  for (let i = 0; i < slab.index.length; i += 3) {
+    const [a, b, c] = [0, 1, 2].map((k) => slab.index[i + k] * 3);
+    volume += (p[a] * (p[b + 1] * p[c + 2] - p[b + 2] * p[c + 1])
+      - p[a + 1] * (p[b] * p[c + 2] - p[b + 2] * p[c])
+      + p[a + 2] * (p[b] * p[c + 1] - p[b + 1] * p[c])) / 6;
+  }
+  const expected = (Math.PI * (40 ** 2 - 20 ** 2 + 5 ** 2)) / (H * H);
+  check('the slab faces outward and holds the solid parts’ volume',
+    Math.abs(volume - expected) < expected * 0.01, `${volume} vs ${expected}`);
+  check('faces come first, then the walls',
+    slab.faceCount > 0 && slab.faceCount < slab.index.length && slab.faceCount % 3 === 0);
+  let flat = true;
+  for (let i = slab.faceCount; i < slab.index.length; i++) {
+    if (slab.normal[slab.index[i] * 3 + 2] !== 0) flat = false;
+  }
+  check('walls face sideways', flat);
+
+  // A square tilted 10 degrees: the walls' shading stays true despite the steps.
+  const tilt = (10 * Math.PI) / 180;
+  const square = mask(200, 200, (x, y) => {
+    const u = (x + 0.5 - 100) * Math.cos(tilt) + (y + 0.5 - 100) * Math.sin(tilt);
+    const v = -(x + 0.5 - 100) * Math.sin(tilt) + (y + 0.5 - 100) * Math.cos(tilt);
+    return Math.abs(u) < 60 && Math.abs(v) < 60;
+  });
+  const edge = outlineShapes(square, 200, 200)[0].outline;
+  const { into, out } = wallNormals(edge);
+  let wobble = 0;
+  let corners = 0;
+  for (let k = 0; k < edge.length / 2; k++) {
+    if (into[k * 2] !== out[k * 2] || into[k * 2 + 1] !== out[k * 2 + 1]) corners++;
+    const u = (edge[k * 2] - 100) * Math.cos(tilt) + (edge[k * 2 + 1] - 100) * Math.sin(tilt);
+    const v = -(edge[k * 2] - 100) * Math.sin(tilt) + (edge[k * 2 + 1] - 100) * Math.cos(tilt);
+    if (Math.abs(Math.abs(u) - 60) < 8 && Math.abs(Math.abs(v) - 60) < 8) continue;
+    const angle = (Math.atan2(into[k * 2 + 1], into[k * 2]) * 180) / Math.PI;
+    const off = (((angle - 10) % 90) + 90) % 90;
+    wobble = Math.max(wobble, Math.min(off, 90 - off));
+  }
+  check('a tilted straight edge is shaded within 3 degrees of true', wobble < 3, `${wobble}`);
+  check('a square keeps sharp corners', corners >= 4);
+
+  const rgba = picture(3, 1, (x) => (x === 0 ? 255 : 0));
+  const filled = solidPixels(rgba, solidMask(rgba, 3, 1), 3, 1);
+  check('see-through pixels take the nearest solid colour, everything opaque',
+    filled[4] === 0 && filled[8] === 0 && filled[5] === 0 && filled[3] === 255 && filled[11] === 255);
+  const small = wallPixels(new Uint8ClampedArray(2048 * 1024 * 4).fill(200), 2048, 1024);
+  check('the walls’ picture is shrunk to 512 and keeps a flat colour',
+    small.width === 512 && small.height === 256 && small.data.every((value) => value === 200));
 }
 
 console.log('\nextra spin axes');
