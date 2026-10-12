@@ -24,8 +24,6 @@ Tip: change the Address → We Love Katamari
 <p>
 <a href="examples/007_Goldeneye_Nintendo%20logo_spin.gif"><img src="examples/readme/007_Goldeneye_Nintendo%20logo_spin.gif" width="32%" alt="007_Goldeneye_Nintendo logo_spin"></a>
 <a href="examples/0208_Chicken_spin.gif"><img src="examples/readme/0208_Chicken_spin.gif" width="32%" alt="0208_Chicken_spin"></a>
-<a href="examples/0445_Folding_Chair_spin.gif"><img src="examples/readme/0445_Folding_Chair_spin.gif" width="32%" alt="0445_Folding_Chair_spin"></a>
-<a href="examples/American%20Cartoons.gif"><img src="examples/readme/American%20Cartoons.gif" width="32%" alt="American Cartoons"></a>
 <a href="examples/BANK%20ANGLE.webp"><img src="examples/readme/BANK%20ANGLE.webp" width="32%" alt="BANK ANGLE"></a>
 <a href="examples/Big_Yoshi_FOV_spin.gif"><img src="examples/readme/Big_Yoshi_FOV_spin.gif" width="32%" alt="Big_Yoshi_FOV_spin"></a>
 <a href="examples/Big_Yoshi_spin.gif"><img src="examples/readme/Big_Yoshi_spin.gif" width="32%" alt="Big_Yoshi_spin"></a>
@@ -39,7 +37,6 @@ Tip: change the Address → We Love Katamari
 <a href="examples/FML.webp"><img src="examples/readme/FML.webp" width="32%" alt="FML"></a>
 <a href="examples/Funee%20Spinning%20GIF%20Maker%20spin.webp"><img src="examples/readme/Funee%20Spinning%20GIF%20Maker%20spin.webp" width="32%" alt="Funee Spinning GIF Maker spin"></a>
 <a href="examples/Giggalypuff_sing_spin.gif"><img src="examples/readme/Giggalypuff_sing_spin.gif" width="32%" alt="Giggalypuff_sing_spin"></a>
-<a href="examples/Happy%20Birthday%20SEABASS.gif"><img src="examples/readme/Happy%20Birthday%20SEABASS.gif" width="32%" alt="Happy Birthday SEABASS"></a>
 <a href="examples/HOW%20I%20SHOW%20UP%20TO%20THE%20FUNCTION.webp"><img src="examples/readme/HOW%20I%20SHOW%20UP%20TO%20THE%20FUNCTION.webp" width="32%" alt="HOW I SHOW UP TO THE FUNCTION"></a>
 <a href="examples/intermediate%20axis%20theorem.webp"><img src="examples/readme/intermediate%20axis%20theorem.webp" width="32%" alt="intermediate axis theorem"></a>
 <a href="examples/Me%20When%201.webp"><img src="examples/readme/Me%20When%201.webp" width="32%" alt="Me When 1"></a>
@@ -57,21 +54,8 @@ Tip: change the Address → We Love Katamari
 <a href="examples/star_spin.gif"><img src="examples/readme/star_spin.gif" width="32%" alt="star_spin"></a>
 <a href="examples/U%20wot%20m8.webp"><img src="examples/readme/U%20wot%20m8.webp" width="32%" alt="U wot m8"></a>
 <a href="examples/U_WOT_M8_2.webp"><img src="examples/readme/U_WOT_M8_2.webp" width="32%" alt="U_WOT_M8_2"></a>
-<a href="examples/Weird%20Ape%20Easteregg.gif"><img src="examples/readme/Weird%20Ape%20Easteregg.gif" width="32%" alt="Weird Ape Easteregg"></a>
 <a href="examples/ya-10b_warthog_spin2.webp"><img src="examples/readme/ya-10b_warthog_spin2.webp" width="32%" alt="ya-10b_warthog_spin2"></a>
 </p>
-.
-
-.
-
-.
-
-.
-
-.
-
-
-
 ## THE FOLLOWING IS LLM GENERATED
 
 ### What it does
