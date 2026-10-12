@@ -4,6 +4,9 @@ tests/out/
 # Local collection of sample models — hundreds of MB, and not ours to publish
 Test3D/
 
+# Local test results, kept out of the repo
+test_results/
+
 # Editor / OS noise
 .DS_Store
 *.swp
