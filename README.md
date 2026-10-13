@@ -1,4 +1,4 @@
-<img src="examples/Funee%20Spinning%20GIF%20Maker_spinning.webp" alt="Funee Spinning GIF Maker">
+<img src="content/Funee%20Spinning%20GIF%20Maker%20spin.webp" alt="Funee Spinning GIF Maker">
 
 **[Open the FSGM Webapp →](https://blackmetalforest.github.io/Funee-Spinning-GIF/)**
 
