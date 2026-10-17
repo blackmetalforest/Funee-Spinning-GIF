@@ -7,7 +7,6 @@ animated WebP, APNG, or a ZIP of frames.
 
 Everything runs in your browser. Models are never uploaded, it's a static Webapp.
 
-**[Open the FSGM Webapp →](https://blackmetalforest.github.io/Funee-Spinning-GIF/)**
 
 ## Where to get 3D models
 **[Katamari Damacy Game Models](https://katamari.andrew-boylan.com/)** - the original website that inspired this FSGM Webapp.
