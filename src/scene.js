@@ -160,8 +160,7 @@ export const DEFAULT_SETTINGS = {
   // A picture loaded as the model (image-model.js): show its own back face,
   // which reads the right way round, in place of the front's mirrored back.
   pictureUnflip: false,
-  // A still picture with see-through parts: its solid parts as a slab this
-  // thick, in % of the picture's longer side (picture-depth.js).
+  // A still picture: its solid parts as a slab this thick, in % of the picture's longer side (picture-depth.js).
   pictureDepth: false,
   pictureDepthAmount: 10,
 };
@@ -689,16 +688,13 @@ export class SpinScene {
   }
 
   /**
-   * Whether the loaded model is a picture that can have Depth: a still with
-   * see-through parts, which the loader's alpha pass (useMapAlpha) has found
-   * and marked on the card's material.
+   * Whether the loaded model is a picture that can have Depth: any still. A
+   * picture with no see-through parts is all solid, and becomes a block.
    */
   get pictureDepthPossible() {
     let possible = false;
     this.eachMesh((mesh) => {
-      const picture = mesh.userData.picture;
-      const front = mesh.userData.sources?.[0];
-      if (picture?.still && (front?.alphaTest > 0 || front?.transparent)) possible = true;
+      if (mesh.userData.picture?.still) possible = true;
     });
     return possible;
   }

@@ -23,8 +23,7 @@
  * Decoding an animation needs the browser's ImageDecoder (WebCodecs). Without
  * it the picture still loads, as its first frame, and the stats say so.
  *
- * **Depth.** A still picture with see-through parts can be a slab cut to its
- * outline instead (picture-depth.js). The scene swaps the slab in for the
+ * **Depth.** A still picture can be a slab cut to its outline instead (picture-depth.js). The scene swaps the slab in for the
  * card while Depth is on, and back out when it is off.
  */
 

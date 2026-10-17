@@ -1229,8 +1229,8 @@ function showAdvanced(report) {
 }
 
 /**
- * The picture rows of Advanced. Depth is offered only for a still picture
- * with see-through parts, and its thickness only while it is on. Unflip
+ * The picture rows of Advanced. Depth is offered for any still picture,
+ * and its thickness only while it is on. Unflip
  * goes while Depth is on: a solid shape's back is its front seen from
  * behind, and a picture turned the right way round would not fit its
  * outline.
@@ -1761,6 +1761,9 @@ const TEXT_RANGE = {
   'normal-strength': [0, 100], 'emission-strength': [0, 1000],
   'background-size': [0, 1000],
   'fg-size': [0, 1000],
+  // Depth's thickness. The slider stops at 50%, but a picture can be made
+  // as deep as anyone likes: at 1000% it is a long bar seen end-on.
+  'depth-amount': [0.1, 100000],
 };
 
 /** Each slider's own range, captured before anything widens it. */

@@ -228,6 +228,10 @@ console.log('\npicture depth');
   check('a tilted straight edge is shaded within 3 degrees of true', wobble < 3, `${wobble}`);
   check('a square keeps sharp corners', corners >= 4);
 
+  const block = outlineShapes(mask(64, 40, () => true), 64, 40);
+  check('a picture with no transparency is an exact box',
+    block.length === 1 && block[0].outline.join() === '0,0,64,0,64,40,0,40' && !block[0].holes.length);
+
   const rgba = picture(3, 1, (x) => (x === 0 ? 255 : 0));
   const filled = solidPixels(rgba, solidMask(rgba, 3, 1), 3, 1);
   check('see-through pixels take the nearest solid colour, everything opaque',

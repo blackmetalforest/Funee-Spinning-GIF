@@ -1,4 +1,4 @@
-<img src="content/Funee%20Spinning%20GIF%20Maker%20spin.webp" alt="Funee Spinning GIF Maker">
+<a href="https://blackmetalforest.github.io/Funee-Spinning-GIF/"><img src="content/Funee%20Spinning%20GIF%20Maker%20spin.webp" alt="Funee Spinning GIF Maker"></a>
 
 **[Open the FSGM Webapp →](https://blackmetalforest.github.io/Funee-Spinning-GIF/)**
 
@@ -189,12 +189,14 @@ textures are (see [Transparent textures drawn black](#what-gets-repaired-on-the-
 hard-edged transparency becomes a cut-out, soft transparency is blended, and
 the **Transparency** layer switch turns it off.
 
-**Depth.** A still picture with see-through parts — a PNG or WebP cut-out,
-or a still GIF with a transparent colour — gets a **Depth** box under 3D
-model → Advanced. Ticked, the picture becomes a solid shape cut to its
-outline, as if from a thick sheet, and a **Thickness** slider appears: a
-share of the picture's longer side, 10% to start. It is not offered for an
-animated picture or one with no transparency.
+**Depth.** Any still picture gets a **Depth** box under 3D model →
+Advanced. Ticked, the picture becomes a solid shape cut to its outline, as
+if from a thick sheet, and a **Thickness** slider appears: a share of the
+picture's longer side, 10% to start. The slider runs to 50%; double-click
+its number to type any thickness, as deep as you like. A picture with see-through parts — a
+PNG or WebP cut-out, or a GIF with a transparent colour — is cut to the
+shape of its solid parts; one with none, such as a JPEG, is solid all over
+and becomes a block. It is not offered for an animated picture.
 
 - **Where the body ends.** A pixel at least half opaque is solid; anything
   less is empty. A feathered or anti-aliased edge is cut at its halfway line,

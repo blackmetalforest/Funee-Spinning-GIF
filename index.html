@@ -143,13 +143,13 @@
           <input type="checkbox" id="sync-anim" checked
                  title="Speed the animation up or down so a whole number of plays fits one loop of the spin exactly, so the exported loop has no jump."></div>
         <p id="sync-note" class="muted small" hidden></p>
-        <!-- Only for a still picture with see-through parts: give it thickness. -->
+        <!-- Only for a still picture: give it thickness. -->
         <div class="row" id="row-depth" hidden><label for="picture-depth">Depth</label>
           <input type="checkbox" id="picture-depth"
                  title="Give the picture's solid parts thickness, cut to their outline. Pixels at least half opaque count as solid."></div>
         <div class="row" id="row-depth-amount" hidden><label for="depth-amount">Thickness</label>
           <input type="range" id="depth-amount" min="1" max="50" step="1" value="10"
-                 title="How deep the shape is, as a share of the picture's longer side.">
+                 title="How deep the shape is, as a share of the picture's longer side. Double-click the number to type any amount.">
           <output for="depth-amount" id="depth-amount-out">10%</output></div>
         <!-- Only for a picture loaded as the model: how its back looks. -->
         <div class="row" id="row-unflip" hidden><label for="picture-unflip">Unflip Backside Image</label>

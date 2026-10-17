@@ -2,7 +2,8 @@
  * Depth for a picture: its solid parts cut out and given thickness, like a
  * shape cut from a thick sheet.
  *
- * Only a still picture with see-through parts can have it (image-model.js
+ * Any still picture can have it; one with no see-through parts is all solid
+ * and becomes a block (image-model.js
  * builds the slab the first time Depth is switched on). Everything here works
  * on plain arrays, so the tests can run it without a browser.
  *
@@ -206,6 +207,11 @@ function inside(x, y, points) {
  * island inside a hole inside a shape comes out as two shapes.
  */
 export function outlineShapes(mask, width, height) {
+  // Solid all over, as a picture with no transparency is: a plain box, square
+  // at the corners. Traced and smoothed, a small one would come out rounded.
+  if (mask.every((solid) => solid)) {
+    return [{ outline: [0, 0, width, 0, width, height, 0, height], holes: [] }];
+  }
   const loops = traceOutlines(mask, width, height)
     .map((loop) => withoutRepeats(simplifyLoop(smoothLoop(loop))))
     .map((points) => ({ points, area: loopArea(points) }))
