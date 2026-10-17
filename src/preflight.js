@@ -321,7 +321,9 @@
   function detailsText() {
     var f = state.facts || {};
     var x = api.extras || {};
+    var version = document.getElementById('app-version');
     var lines = [
+      'App: ' + (version ? version.textContent : 'version not found'),
       'Browser: ' + (window.navigator ? window.navigator.userAgent : ''),
       'Address: ' + (window.location ? window.location.protocol + '//' + window.location.host : ''),
       'Graphics: ' + (f.gpu || 'not reported by the browser'),

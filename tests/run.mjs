@@ -51,6 +51,19 @@ function check(name, condition, detail = '') {
   else { failed++; console.log(`  FAIL ${name} ${detail}`); }
 }
 
+console.log('\nversion');
+{
+  // One number in three places: what the app shows, package.json, and the
+  // newest changelog entry. A release that forgets one fails here.
+  const html = readFileSync(join(here, '..', 'index.html'), 'utf8');
+  const shown = html.match(/id="app-version">V(\d+\.\d+\.\d+)</)?.[1];
+  const pkg = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf8')).version;
+  const log = readFileSync(join(here, '..', 'CHANGELOG.md'), 'utf8').match(/^## (\d+\.\d+\.\d+)/m)?.[1];
+  check('the app shows a MAJOR.MINOR.PATCH version', !!shown, `${shown}`);
+  check('package.json carries the same version', pkg === shown, `${pkg} vs ${shown}`);
+  check('the newest changelog entry is that version', log === shown, `${log} vs ${shown}`);
+}
+
 console.log('\ntiming');
 // Python's round() is half-to-even; Math.round is not. 12.5 must give 12.
 check('banker rounding 12.5 -> 12', roundHalfToEven(12.5) === 12);

@@ -1380,6 +1380,33 @@ transparency repair, against zips built in memory.
 automated browser run can hand exported files back and have their frame counts
 and timing verified.
 
+## Versions
+
+**Current version: 1.0.0**, the first release. What changed in each release is
+in [CHANGELOG.md](CHANGELOG.md).
+
+Numbers are **MAJOR.MINOR.PATCH**:
+
+- **PATCH** (1.0.0 → 1.0.1) for fixes: something that should have worked
+  now does.
+- **MINOR** (1.0.0 → 1.1.0) for new features that change nothing you already
+  use, such as a new format or a new option.
+- **MAJOR** (1.0.0 → 2.0.0) when something you rely on works differently: a
+  setting removed, an export that comes out differently, a format dropped.
+
+The number lives in three places, which the tests check agree:
+
+- `index.html`, where it shows at the top right of the panel (`V1.0.0`), and
+  where the Browser check's details read it from, so a bug report says which
+  version it came from;
+- `package.json`'s `version`;
+- the newest heading in `CHANGELOG.md`.
+
+**Making a release:** add a section at the top of `CHANGELOG.md`, change the
+number in `index.html` and `package.json` to match, run the tests, commit, and
+tag the commit `v` plus the number (`git tag v1.1.0`, then
+`git push origin v1.1.0`). The tag marks exactly which code each version was.
+
 ## Deploying
 
 `.github/workflows/pages.yml` runs the tests and publishes the repo to GitHub
@@ -1389,7 +1416,8 @@ Pages on every push to `main`. Enable it once under
 ## Project layout
 
 ```
-index.html            markup and the import map
+index.html            markup and the import map, and the version number
+CHANGELOG.md          what changed in each release
 src/preflight.js      browser checks and error displays, run before the app
 serve.py              local server that stops browsers caching stale modules
 src/style.css         layout, including the mobile breakpoint
