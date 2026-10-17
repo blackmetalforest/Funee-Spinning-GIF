@@ -24,34 +24,34 @@ Tip: change the Address → We Love Katamari
 <p>
 <a href="examples/Big_Yoshi_FOV_spin.gif"><img src="examples/readme/Big_Yoshi_FOV_spin.gif" width="32%" alt="Big_Yoshi_FOV_spin"></a>
 <a href="https://katamari.andrew-boylan.com/"><img src="examples/readme/0208_Chicken_spin.gif" width="32%" alt="0208_Chicken_spin"></a>
-<a href="examples/BLASTER_spin.webp"><img src="examples/readme/BLASTER_spin.webp" width="32%" alt="BLASTER_spin"></a>
+<a href="https://models.spriters-resource.com/pc_computer/hotwheelsstunttrackdriver/"><img src="examples/readme/BLASTER_spin.webp" width="32%" alt="BLASTER_spin"></a>
 <a href="examples/BANK%20ANGLE.webp"><img src="examples/readme/BANK%20ANGLE.webp" width="32%" alt="BANK ANGLE"></a>
 <a href="examples/Caveman%20SpongeBob_spin.gif"><img src="examples/readme/Caveman%20SpongeBob_spin.gif" width="32%" alt="Caveman SpongeBob_spin"></a>
-<a href="examples/FML.webp"><img src="examples/readme/FML.webp" width="32%" alt="FML"></a>
+<a href="https://models.spriters-resource.com/gamecube/supermonkeyball2/"><img src="examples/readme/FML.webp" width="32%" alt="FML"></a>
 <a href="examples/Big_Yoshi_spin.gif"><img src="examples/readme/Big_Yoshi_spin.gif" width="32%" alt="Big_Yoshi_spin"></a>
 <a href="examples/BOGOS%20BINTED.webp"><img src="examples/readme/BOGOS%20BINTED.webp" width="32%" alt="BOGOS BINTED"></a>
 <a href="examples/CONO_spin.webp"><img src="examples/readme/CONO_spin.webp" width="32%" alt="CONO_spin"></a>
-<a href="examples/Couple_spin.gif"><img src="examples/readme/Couple_spin.gif" width="32%" alt="Couple_spin"></a>
+<a href="https://models.spriters-resource.com/nintendo_64/thelegendofzeldaocarinaoftime/"><img src="examples/readme/Couple_spin.gif" width="32%" alt="Couple_spin"></a>
 <a href="examples/Dead.webp"><img src="examples/readme/Dead.webp" width="32%" alt="Dead"></a>
-<a href="examples/Do%20a%20Kickflip%21.webp"><img src="examples/readme/Do%20a%20Kickflip%21.webp" width="32%" alt="Do a Kickflip!"></a>
+<a href="https://models.spriters-resource.com/dreamcast/tonyhawksproskater2/"><img src="examples/readme/Do%20a%20Kickflip%21.webp" width="32%" alt="Do a Kickflip!"></a>
 <a href="examples/Funee%20Spinning%20GIF%20Maker%20spin.webp"><img src="examples/readme/Funee%20Spinning%20GIF%20Maker%20spin.webp" width="32%" alt="Funee Spinning GIF Maker spin"></a>
 <a href="examples/Giggalypuff_sing_spin.gif"><img src="examples/readme/Giggalypuff_sing_spin.gif" width="32%" alt="Giggalypuff_sing_spin"></a>
-<a href="examples/HOW%20I%20SHOW%20UP%20TO%20THE%20FUNCTION.webp"><img src="examples/readme/HOW%20I%20SHOW%20UP%20TO%20THE%20FUNCTION.webp" width="32%" alt="HOW I SHOW UP TO THE FUNCTION"></a>
-<a href="examples/intermediate%20axis%20theorem.webp"><img src="examples/readme/intermediate%20axis%20theorem.webp" width="32%" alt="intermediate axis theorem"></a>
+<a href="https://models.spriters-resource.com/pc_computer/toystory3/"><img src="examples/readme/HOW%20I%20SHOW%20UP%20TO%20THE%20FUNCTION.webp" width="32%" alt="HOW I SHOW UP TO THE FUNCTION"></a>
+<a href="https://models.spriters-resource.com/pc_computer/familyguybacktothemultiverse/"><img src="examples/readme/intermediate%20axis%20theorem.webp" width="32%" alt="intermediate axis theorem"></a>
 <a href="examples/Me%20When%201.webp"><img src="examples/readme/Me%20When%201.webp" width="32%" alt="Me When 1"></a>
 <a href="examples/Me%20When%202.gif"><img src="examples/readme/Me%20When%202.gif" width="32%" alt="Me When 2"></a>
 <a href="examples/Me%20When%203.webp"><img src="examples/readme/Me%20When%203.webp" width="32%" alt="Me When 3"></a>
-<a href="examples/MK64_nintendo_spin.gif"><img src="examples/readme/MK64_nintendo_spin.gif" width="32%" alt="MK64_nintendo_spin"></a>
+<a href="https://models.spriters-resource.com/nintendo_64/mariokart64/asset/287700/"><img src="examples/readme/MK64_nintendo_spin.gif" width="32%" alt="MK64_nintendo_spin"></a>
 <a href="examples/morshu_fly.gif"><img src="examples/readme/morshu_fly.gif" width="32%" alt="morshu_fly"></a>
 <a href="examples/My%20Creation.webp"><img src="examples/readme/My%20Creation.webp" width="32%" alt="My Creation"></a>
-<a href="examples/n64_logo_spin.gif"><img src="examples/readme/n64_logo_spin.gif" width="32%" alt="n64_logo_spin"></a>
+<a href="https://models.spriters-resource.com/nintendo_64/systembiosn64dd/asset/320285/"><img src="examples/readme/n64_logo_spin.gif" width="32%" alt="n64_logo_spin"></a>
 <a href="https://katamari.andrew-boylan.com/"><img src="examples/readme/Na%20Naaa.webp" width="32%" alt="Na Naaa"></a>
 <a href="examples/RICHER.webp"><img src="examples/readme/RICHER.webp" width="32%" alt="RICHER"></a>
 <a href="examples/skeleton_spin.gif"><img src="examples/readme/skeleton_spin.gif" width="32%" alt="skeleton_spin"></a>
-<a href="examples/Sonic%20Fly.webp"><img src="examples/readme/Sonic%20Fly.webp" width="32%" alt="Sonic Fly"></a>
-<a href="examples/star_spin.gif"><img src="examples/readme/star_spin.gif" width="32%" alt="star_spin"></a>
-<a href="examples/U%20wot%20m8.webp"><img src="examples/readme/U%20wot%20m8.webp" width="32%" alt="U wot m8"></a>
-<a href="examples/U_WOT_M8_2.webp"><img src="examples/readme/U_WOT_M8_2.webp" width="32%" alt="U_WOT_M8_2"></a>
+<a href="https://models.spriters-resource.com/pc_computer/sonicrumble/"><img src="examples/readme/Sonic%20Fly.webp" width="32%" alt="Sonic Fly"></a>
+<a href="https://models.spriters-resource.com/nintendo_64/supermario64/"><img src="examples/readme/star_spin.gif" width="32%" alt="star_spin"></a>
+<a href="https://models.spriters-resource.com/pc_computer/sonicrumble/"><img src="examples/readme/U%20wot%20m8.webp" width="32%" alt="U wot m8"></a>
+<a href="https://models.spriters-resource.com/pc_computer/sonicrumble/"><img src="examples/readme/U_WOT_M8_2.webp" width="32%" alt="U_WOT_M8_2"></a>
 <a href="examples/ya-10b_warthog_spin2.webp"><img src="examples/readme/ya-10b_warthog_spin2.webp" width="32%" alt="ya-10b_warthog_spin2"></a>
 </p>
 ## THE FOLLOWING IS LLM GENERATED
