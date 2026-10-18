@@ -47,7 +47,6 @@ Tip: change the Address → We Love Katamari
 <a href="https://katamari.andrew-boylan.com/"><img src="examples/readme/Na%20Naaa.webp" width="32%" alt="Na Naaa"></a>
 <a href="https://skfb.ly/RNJq"><img src="examples/readme/RICHER.webp" width="32%" alt="RICHER"></a>
 <a href="examples/skeleton_spin.gif"><img src="examples/readme/skeleton_spin.gif" width="32%" alt="skeleton_spin"></a>
-<a href="https://models.spriters-resource.com/pc_computer/sonicrumble/"><img src="examples/readme/Sonic%20Fly.webp" width="32%" alt="Sonic Fly"></a>
 <a href="https://models.spriters-resource.com/nintendo_64/supermario64/"><img src="examples/readme/star_spin.gif" width="32%" alt="star_spin"></a>
 <a href="https://models.spriters-resource.com/pc_computer/sonicrumble/"><img src="examples/readme/U%20wot%20m8.webp" width="32%" alt="U wot m8"></a>
 <a href="https://models.spriters-resource.com/pc_computer/sonicrumble/"><img src="examples/readme/U_WOT_M8_2.webp" width="32%" alt="U_WOT_M8_2"></a>
