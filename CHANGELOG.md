@@ -4,6 +4,10 @@ Every release of Funee Spinning GIF Maker, newest first. Version numbers are
 **MAJOR.MINOR.PATCH** — see "Versions" in the [README](README.md#versions) for
 what bumps which, and how a release is made.
 
+## 1.0.1 — 2026-10-17
+
+- Image presets: 320 × 320 and 400 × 400 replaced by **350 × 350 (Discord)**.
+
 ## 1.0.0 — 2026-10-17
 
 The first release.

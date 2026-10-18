@@ -1381,7 +1381,7 @@ and timing verified.
 
 ## Versions
 
-**Current version: 1.0.0**, the first release. What changed in each release is
+**Current version: 1.0.1.** The first release was 1.0.0. What changed in each release is
 in [CHANGELOG.md](CHANGELOG.md).
 
 Numbers are **MAJOR.MINOR.PATCH**:
@@ -1401,8 +1401,12 @@ The number lives in three places, which the tests check agree:
 - `package.json`'s `version`;
 - the newest heading in `CHANGELOG.md`.
 
-**Making a release:** add a section at the top of `CHANGELOG.md`, change the
-number in `index.html` and `package.json` to match, run the tests, commit, and
+Changes made since the last release are listed under **Unreleased** at the
+top of `CHANGELOG.md` as they happen.
+
+**Making a release:** turn the Unreleased heading into the new version and
+date, change the number in `index.html` and `package.json` to match, run the
+tests, commit, and
 tag the commit `v` plus the number (`git tag v1.1.0`, then
 `git push origin v1.1.0`). The tag marks exactly which code each version was.
 
